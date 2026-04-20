@@ -269,18 +269,24 @@ td input[readonly]{background:#f0f0f0;color:#888;cursor:not-allowed;border-color
 
       <!-- Datáfono -->
       <div class="res-block">
-        <div class="res-block-title">Pagos Datáfono</div>
-        <div class="entries-list" id="datafonoLista"></div>
-        <button class="btn-add-entry" id="btnAddDatafono">＋ Agregar pago datáfono</button>
-        <div class="entry-total" id="datafonoTotal">Total datáfono: $0</div>
+        <div class="res-block-title">Pago Datáfono</div>
+        <div class="entry-row" style="margin-top:4px;">
+          <span style="font-size:.78rem;color:var(--gris4);flex-shrink:0;">$</span>
+          <input type="number" id="inDatafono" min="0" placeholder="0"
+            style="flex:1;padding:7px 10px;border:1.5px solid var(--gris2);border-radius:5px;font-family:Inter,sans-serif;font-size:.85rem;background:var(--gris1);text-align:right;"
+            oninput="recalc();autoSave();">
+        </div>
       </div>
 
       <!-- Transferencia -->
       <div class="res-block">
-        <div class="res-block-title">Pagos Transferencia</div>
-        <div class="entries-list" id="transferenciaLista"></div>
-        <button class="btn-add-entry" id="btnAddTransferencia">＋ Agregar transferencia</button>
-        <div class="entry-total" id="transferenciaTotal">Total transferencias: $0</div>
+        <div class="res-block-title">Pago Transferencia</div>
+        <div class="entry-row" style="margin-top:4px;">
+          <span style="font-size:.78rem;color:var(--gris4);flex-shrink:0;">$</span>
+          <input type="number" id="inTransferencia" min="0" placeholder="0"
+            style="flex:1;padding:7px 10px;border:1.5px solid var(--gris2);border-radius:5px;font-family:Inter,sans-serif;font-size:.85rem;background:var(--gris1);text-align:right;"
+            oninput="recalc();autoSave();">
+        </div>
       </div>
 
       <!-- Entregas de dinero -->
@@ -297,7 +303,7 @@ td input[readonly]{background:#f0f0f0;color:#888;cursor:not-allowed;border-color
         <hr class="res-divider">
         <div class="res-row"><span class="label">− Gastos</span><span class="value" id="rGastos">$0</span></div>
         <div class="res-row"><span class="label">− Datáfono</span><span class="value" id="rDatafono">$0</span></div>
-        <div class="res-row"><span class="label">− Transferencias</span><span class="value" id="rTransferencia">$0</span></div>
+        <div class="res-row"><span class="label">− Transferencia</span><span class="value" id="rTransferencia">$0</span></div>
         <hr class="res-divider">
         <div class="res-row total"><span class="label">💵 Efectivo a entregar</span><span class="value" id="rEfectivo">$0</span></div>
         <hr class="res-divider">
@@ -386,6 +392,7 @@ var gastos       = [];
 var datafono     = [];
 var transferencia= [];
 var entregas     = [];
+var productosBorrar = [];
 
 function sbGet(table, q){
   return fetch(SB_URL+'/rest/v1/'+table+'?'+(q||''),{headers:HEADS})
@@ -434,8 +441,7 @@ document.getElementById('inNota').addEventListener('input', autoSave);
 
 // Botones de agregar entradas
 document.getElementById('btnAddGasto').addEventListener('click', function(){ addEntry('gastos'); });
-document.getElementById('btnAddDatafono').addEventListener('click', function(){ addEntry('datafono'); });
-document.getElementById('btnAddTransferencia').addEventListener('click', function(){ addEntry('transferencia'); });
+// datáfono y transferencia son campos simples
 document.getElementById('btnAddEntrega').addEventListener('click', function(){ addEntry('entregas'); });
 
 // ── ENTRADA ───────────────────────────────────────
@@ -489,11 +495,17 @@ function cargarInventario(){
             disponible:0, vendido:0, total_venta:0};
         });
         if(saved){
-          gastos        = saved.gastos_list        || [];
-          datafono      = saved.datafono_list      || [];
-          transferencia = saved.transferencia_list || [];
-          entregas      = saved.entregas_list      || [];
+          gastos        = saved.gastos_list   || [];
+          entregas      = saved.entregas_list || [];
+          datafono      = [];
+          transferencia = [];
           document.getElementById('inNota').value = saved.nota||'';
+          setTimeout(function(){
+            var dEl=document.getElementById('inDatafono');
+            var tEl=document.getElementById('inTransferencia');
+            if(dEl) dEl.value = saved.datafono_val||'';
+            if(tEl) tEl.value = saved.transferencia_val||'';
+          },100);
         }
         buildTable(); renderAllEntries(); recalc();
         setSyncStatus('ok','✓ Listo');
@@ -599,16 +611,15 @@ function renderEntries(tipo){
   document.getElementById(totalId).textContent=totalLabel+': '+fmt(total);
 }
 function renderAllEntries(){
-  renderEntries('gastos'); renderEntries('datafono');
-  renderEntries('transferencia'); renderEntries('entregas');
+  renderEntries('gastos'); renderEntries('entregas');
 }
 
 // ── RECALC RESUMEN ────────────────────────────────
 function recalc(){
   var tv =invRows.reduce(function(s,r){return s+r.total_venta;},0);
   var gas=gastos.reduce(function(s,e){return s+(e.valor||0);},0);
-  var dat=datafono.reduce(function(s,e){return s+(e.valor||0);},0);
-  var tra=transferencia.reduce(function(s,e){return s+(e.valor||0);},0);
+  var dat=parseFloat(document.getElementById('inDatafono')?document.getElementById('inDatafono').value:0)||0;
+  var tra=parseFloat(document.getElementById('inTransferencia')?document.getElementById('inTransferencia').value:0)||0;
   var ent=entregas.reduce(function(s,e){return s+(e.valor||0);},0);
   var ef =tv-gas-dat-tra;
   var dif=ent-ef;
@@ -637,10 +648,11 @@ function guardar(){
   sbUpsert('turnos_caja',{
     turno_key:key,punto:sesion.punto,turno:sesion.turno,fecha:sesion.fecha,cajero:sesion.cajero,
     snapshot:snap,
-    gastos_list:gastos, datafono_list:datafono,
-    transferencia_list:transferencia, entregas_list:entregas,
+    gastos_list:gastos, entregas_list:entregas,
+    datafono_val:parseFloat(document.getElementById('inDatafono').value)||0,
+    transferencia_val:parseFloat(document.getElementById('inTransferencia').value)||0,
     gastos:gastos.reduce(function(s,e){return s+(e.valor||0);},0),
-    digital:datafono.reduce(function(s,e){return s+(e.valor||0);},0)+transferencia.reduce(function(s,e){return s+(e.valor||0);},0),
+    digital:(parseFloat(document.getElementById('inDatafono').value)||0)+(parseFloat(document.getElementById('inTransferencia').value)||0),
     entregado:entregas.reduce(function(s,e){return s+(e.valor||0);},0),
     nota:document.getElementById('inNota').value,
     cerrado:false, updated_at:new Date().toISOString()
@@ -661,17 +673,28 @@ function openAdmin(){
 }
 function renderProdAdmin(){
   var list=document.getElementById('prodAdminList'); list.innerHTML='';
+  if(!productos.length){
+    list.innerHTML='<p style="color:var(--gris4);font-style:italic;font-size:.8rem;padding:8px 0;">Sin productos. Agrega uno abajo.</p>';
+    return;
+  }
   productos.forEach(function(p,i){
     var row=document.createElement('div'); row.className='prod-admin-row';
-    var nameEl=document.createElement('span'); nameEl.className='prod-admin-name'; nameEl.textContent=p.name;
+    var nameEl=document.createElement('span'); nameEl.className='prod-admin-name';
+    nameEl.textContent=p.name+(p._new?' (nuevo)':'');
     var precioWrap=document.createElement('div'); precioWrap.className='prod-admin-precio';
     var sym=document.createElement('span'); sym.textContent='$';
-    var inP=document.createElement('input'); inP.type='number'; inP.min='0'; inP.value=p.precio||0;
-    inP.addEventListener('input',(function(prod){return function(){prod.precio=parseFloat(this.value)||0;};})(p));
+    var inP=document.createElement('input'); inP.type='number'; inP.min='0';
+    inP.value=p.precio||''; inP.placeholder='0';
+    inP.style.cssText='width:80px;padding:4px 6px;border:1.5px solid var(--gris2);border-radius:4px;font-size:.82rem;text-align:right;background:white;';
+    inP.addEventListener('change',(function(prod){return function(){prod.precio=parseFloat(this.value)||0;};})(p));
     precioWrap.appendChild(sym); precioWrap.appendChild(inP);
     var btnDel=document.createElement('button'); btnDel.className='prod-admin-del'; btnDel.textContent='🗑';
+    btnDel.title='Eliminar producto';
     btnDel.addEventListener('click',(function(prod){return function(){
-      if(confirm('¿Eliminar "'+prod.name+'"?')){ productos=productos.filter(function(x){return x.id!==prod.id;}); renderProdAdmin(); }
+      if(!confirm('¿Eliminar "'+prod.name+'"? Se eliminará permanentemente.')) return;
+      if(!prod._new) productosBorrar.push(prod.id);
+      productos=productos.filter(function(x){return x.id!==prod.id;});
+      renderProdAdmin();
     };})(p));
     row.appendChild(nameEl); row.appendChild(precioWrap); row.appendChild(btnDel);
     list.appendChild(row);
@@ -700,39 +723,63 @@ function renderAjuste(){
   });
 }
 function saveAdmin(){
-  var motivo=document.getElementById('ajusteMotivo')?document.getElementById('ajusteMotivo').value.trim():'';
-  if(sesion && motivo==='' && document.getElementById('ajusteSection').style.display!=='none'){
-    alert('El motivo del ajuste es obligatorio.');return;
+  var motivo = document.getElementById('ajusteMotivo') ? document.getElementById('ajusteMotivo').value.trim() : '';
+  if(sesion && document.getElementById('ajusteSection').style.display!=='none' && motivo===''){
+    alert('El motivo del ajuste es obligatorio.'); return;
   }
   setSyncStatus('sync','⟳ Guardando...');
-  // Guardar precios en Supabase
-  var updates=productos.map(function(p){
-    return sbUpsert('productos',{id:p.id,name:p.name,precio:p.precio||0,orden:productos.indexOf(p),updated_at:new Date().toISOString()});
+
+  // Guardar precios: solo actualizar los existentes, insertar los nuevos
+  var updates = productos.map(function(p, i){
+    var data = {name:p.name, precio:p.precio||0, orden:i, updated_at:new Date().toISOString()};
+    if(p._new){
+      // Producto nuevo de venta: insertar con id generado
+      data.id = p.id;
+      return fetch(SB_URL+'/rest/v1/productos',{
+        method:'POST',
+        headers:Object.assign({},HEADS,{'Prefer':'resolution=merge-duplicates'}),
+        body:JSON.stringify(data)
+      }).then(function(r){ if(!r.ok) return r.text().then(function(t){throw new Error(t);}); delete p._new; });
+    } else {
+      // Producto existente: PATCH solo precio y orden
+      return fetch(SB_URL+'/rest/v1/productos?id=eq.'+p.id,{
+        method:'PATCH',
+        headers:Object.assign({},HEADS,{'Prefer':'return=minimal'}),
+        body:JSON.stringify({precio:p.precio||0, orden:i, updated_at:new Date().toISOString()})
+      }).then(function(r){ if(!r.ok) return r.text().then(function(t){throw new Error(t);}); });
+    }
   });
-  Promise.all(updates).then(function(){
-    // Si hay ajuste de inventario anterior
+
+  // Eliminar productos marcados para borrar
+  var deletes = productosBorrar.map(function(id){
+    return fetch(SB_URL+'/rest/v1/productos?id=eq.'+id,{method:'DELETE',headers:HEADS})
+      .then(function(r){ if(!r.ok) return r.text().then(function(t){throw new Error(t);}); });
+  });
+
+  Promise.all(updates.concat(deletes)).then(function(){
+    productosBorrar = [];
+    // Actualizar precios en invRows
+    invRows.forEach(function(r){
+      var p = productos.find(function(x){return x.id===r.id;});
+      if(p) r.precio = p.precio;
+    });
+    // Ajuste inventario anterior
     if(sesion && motivo){
       invRows.forEach(function(r){calcFila(r);});
-      buildTable(); recalc();
     }
+    buildTable(); recalc();
+    if(sesion) guardar();
     setSyncStatus('ok','✓ Guardado');
     document.getElementById('adminModal').classList.remove('open');
-    // Recargar tabla con nuevos precios
-    invRows.forEach(function(r){
-      var p=productos.find(function(x){return x.id===r.id;});
-      if(p) r.precio=p.precio;
-    });
-    buildTable();
-    if(sesion) guardar();
-  }).catch(function(e){setSyncStatus('err','✗ Error');alert('Error: '+e.message);});
+  }).catch(function(e){ setSyncStatus('err','✗ Error'); alert('Error al guardar: '+e.message); });
 }
 
 // ── CIERRE ────────────────────────────────────────
 function abrirCierre(){
   var tv =invRows.reduce(function(s,r){return s+r.total_venta;},0);
   var gas=gastos.reduce(function(s,e){return s+(e.valor||0);},0);
-  var dat=datafono.reduce(function(s,e){return s+(e.valor||0);},0);
-  var tra=transferencia.reduce(function(s,e){return s+(e.valor||0);},0);
+  var dat=parseFloat(document.getElementById('inDatafono')?document.getElementById('inDatafono').value:0)||0;
+  var tra=parseFloat(document.getElementById('inTransferencia')?document.getElementById('inTransferencia').value:0)||0;
   var ent=entregas.reduce(function(s,e){return s+(e.valor||0);},0);
   var ef =tv-gas-dat-tra;
   var dif=ent-ef;
@@ -762,10 +809,11 @@ function confirmarCierre(){
   sbUpsert('turnos_caja',{
     turno_key:key,punto:sesion.punto,turno:sesion.turno,fecha:sesion.fecha,cajero:sesion.cajero,
     snapshot:snap,
-    gastos_list:gastos,datafono_list:datafono,
-    transferencia_list:transferencia,entregas_list:entregas,
+    gastos_list:gastos, entregas_list:entregas,
+    datafono_val:parseFloat(document.getElementById('inDatafono').value)||0,
+    transferencia_val:parseFloat(document.getElementById('inTransferencia').value)||0,
     gastos:gastos.reduce(function(s,e){return s+(e.valor||0);},0),
-    digital:datafono.reduce(function(s,e){return s+(e.valor||0);},0)+transferencia.reduce(function(s,e){return s+(e.valor||0);},0),
+    digital:(parseFloat(document.getElementById('inDatafono').value)||0)+(parseFloat(document.getElementById('inTransferencia').value)||0),
     entregado:entregas.reduce(function(s,e){return s+(e.valor||0);},0),
     nota:document.getElementById('inNota').value,
     cerrado:true, updated_at:new Date().toISOString()
@@ -783,8 +831,8 @@ function imprimirTurno(){
   var tN=sesion.turno==='manana'?'☀ Mañana':sesion.turno==='tarde'?'🌙 Tarde':'⬛ Completo';
   var tv =invRows.reduce(function(s,r){return s+r.total_venta;},0);
   var gas=gastos.reduce(function(s,e){return s+(e.valor||0);},0);
-  var dat=datafono.reduce(function(s,e){return s+(e.valor||0);},0);
-  var tra=transferencia.reduce(function(s,e){return s+(e.valor||0);},0);
+  var dat=parseFloat(document.getElementById('inDatafono')?document.getElementById('inDatafono').value:0)||0;
+  var tra=parseFloat(document.getElementById('inTransferencia')?document.getElementById('inTransferencia').value:0)||0;
   var ent=entregas.reduce(function(s,e){return s+(e.valor||0);},0);
   var ef=tv-gas-dat-tra;
   var dif=ent-ef;
