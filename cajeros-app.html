@@ -662,14 +662,25 @@ function guardar(){
 
 // ── ADMIN ─────────────────────────────────────────
 function openAdmin(){
-  renderProdAdmin();
-  if(sesion){
-    document.getElementById('ajusteSection').style.display='block';
-    var tN=sesion.turno==='manana'?'Mañana':sesion.turno==='tarde'?'Tarde':'Completo';
-    document.getElementById('ajusteTurnoLabel').textContent=sesion.fecha+' · '+tN;
-    renderAjuste();
-  }
-  document.getElementById('adminModal').classList.add('open');
+  // Recargar productos frescos de Supabase antes de mostrar admin
+  setSyncStatus('sync','⟳ Cargando...');
+  sbGet('productos','order=orden.asc,id.asc').then(function(prods){
+    productos = prods.filter(function(p){return p.name&&p.name.trim();})
+                     .map(function(p){return {id:p.id,name:p.name,precio:p.precio||0};});
+    productosBorrar = [];
+    renderProdAdmin();
+    if(sesion){
+      document.getElementById('ajusteSection').style.display='block';
+      var tN=sesion.turno==='manana'?'Mañana':sesion.turno==='tarde'?'Tarde':'Completo';
+      document.getElementById('ajusteTurnoLabel').textContent=sesion.fecha+' · '+tN;
+      renderAjuste();
+    }
+    setSyncStatus('ok','✓');
+    document.getElementById('adminModal').classList.add('open');
+  }).catch(function(e){
+    setSyncStatus('err','✗ Error');
+    alert('Error al cargar productos: '+e.message);
+  });
 }
 function renderProdAdmin(){
   var list=document.getElementById('prodAdminList'); list.innerHTML='';
@@ -686,6 +697,7 @@ function renderProdAdmin(){
     var inP=document.createElement('input'); inP.type='number'; inP.min='0';
     inP.value=p.precio||''; inP.placeholder='0';
     inP.style.cssText='width:80px;padding:4px 6px;border:1.5px solid var(--gris2);border-radius:4px;font-size:.82rem;text-align:right;background:white;';
+    inP.addEventListener('input',(function(prod){return function(){prod.precio=parseFloat(this.value)||0;};})(p));
     inP.addEventListener('change',(function(prod){return function(){prod.precio=parseFloat(this.value)||0;};})(p));
     precioWrap.appendChild(sym); precioWrap.appendChild(inP);
     var btnDel=document.createElement('button'); btnDel.className='prod-admin-del'; btnDel.textContent='🗑';
@@ -704,7 +716,8 @@ function addProdAdmin(){
   var name=document.getElementById('newProdName').value.trim();
   var precio=parseFloat(document.getElementById('newProdPrecio').value)||0;
   if(!name){alert('Escribe el nombre del producto.');return;}
-  var id='caj_'+Math.random().toString(36).slice(2,9);
+  // Generar id único que no colisione con los de producción
+  var id='vta_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
   productos.push({id:id,name:name,precio:precio,_new:true});
   document.getElementById('newProdName').value='';
   document.getElementById('newProdPrecio').value='';
