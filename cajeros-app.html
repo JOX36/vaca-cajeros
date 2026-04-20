@@ -790,99 +790,107 @@ async function confirmarCierre(){
 
 // ══ IMPRIMIR ══
 function imprimirTurno(){
-  const puntoNombre={autopista:'Vaca Autopista',boquia:'Vaca Boquia',tebaida:'Vaca Tebaida'}[sesion.punto];
-  const turnoNombre=sesion.turno==='manana'?'☀ Mañana':sesion.turno==='tarde'?'🌙 Tarde':'⬛ Completo';
-  const totalVentas=invRows.reduce((s,r)=>s+r.total_venta,0);
-  const gastos  =parseFloat(document.getElementById('inGastos').value)||0;
-  const digital =parseFloat(document.getElementById('inDigital').value)||0;
-  const efectivo=totalVentas-gastos-digital;
-  const entregado=parseFloat(document.getElementById('inEntregado').value)||0;
-  const nota    =document.getElementById('inNota').value;
-  const diff    =entregado-efectivo;
-  const now     =new Date();
-  const hora    =now.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
+  if(!sesion) return;
+  const puntoNombre = {autopista:'Vaca Autopista',boquia:'Vaca Boquia',tebaida:'Vaca Tebaida'}[sesion.punto];
+  const turnoNombre = sesion.turno==='manana'?'☀ Mañana':sesion.turno==='tarde'?'🌙 Tarde':'⬛ Completo';
+  const totalVentas = invRows.reduce(function(s,r){return s+r.total_venta;},0);
+  const gastos      = parseFloat(document.getElementById('inGastos').value)||0;
+  const digital     = parseFloat(document.getElementById('inDigital').value)||0;
+  const efectivo    = totalVentas - gastos - digital;
+  const entregado   = parseFloat(document.getElementById('inEntregado').value)||0;
+  const nota        = document.getElementById('inNota').value;
+  const diff        = entregado - efectivo;
+  const now         = new Date();
+  const hora        = now.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
+  const diffTxt     = diff===0 ? '✔ Cuadra' : diff<0 ? 'Falta '+fmt(Math.abs(diff)) : 'Sobran '+fmt(diff);
+  const diffCol     = diff===0 ? '#2d6a2d' : diff<0 ? '#b02020' : '#7a4a00';
 
-  let filas='';
-  invRows.forEach((r,i)=>{
-    filas+=`<tr>
-      <td style="text-align:left;font-weight:500">${escH(r.name)}</td>
-      <td>${fmt(r.precio)}</td>
-      <td>${r.ant||'—'}</td>
-      <td>${r.entrante||'—'}</td>
-      <td><b>${r.disponible||'—'}</b></td>
-      <td>${r.dev||'—'}</td>
-      <td>${r.inv_final||'—'}</td>
-      <td style="font-weight:700;color:#2d6a2d">${r.vendido||'—'}</td>
-      <td style="font-weight:700">${r.total_venta>0?fmt(r.total_venta):'—'}</td>
-    </tr>`;
+  var filas = '';
+  invRows.forEach(function(r,i){
+    filas += '<tr>'
+      + '<td style="text-align:left;font-weight:500">'+escH(r.name)+'</td>'
+      + '<td>'+fmt(r.precio)+'</td>'
+      + '<td>'+(r.ant||'—')+'</td>'
+      + '<td>'+(r.entrante||'—')+'</td>'
+      + '<td><b>'+(r.disponible||'—')+'</b></td>'
+      + '<td>'+(r.dev||'—')+'</td>'
+      + '<td>'+(r.inv_final||'—')+'</td>'
+      + '<td style="font-weight:700;color:#2d6a2d">'+(r.vendido||'—')+'</td>'
+      + '<td style="font-weight:700">'+(r.total_venta>0?fmt(r.total_venta):'—')+'</td>'
+      + '</tr>';
   });
 
-  const diffTxt=diff===0?'✔ Cuadra':diff<0?`Falta ${fmt(Math.abs(diff))}`:` Sobran ${fmt(diff)}`;
-  const diffCol=diff===0?'#2d6a2d':diff<0?'#b02020':'#7a4a00';
+  var resumenExtra = '';
+  if(entregado>0){
+    resumenExtra = '<div class="res-row"><span>Dinero entregado</span><b>'+fmt(entregado)+'</b></div>'
+      + '<div class="res-row"><span>Diferencia</span><b style="color:'+diffCol+'">'+diffTxt+'</b></div>';
+  }
+  var notaHtml = nota ? '<div style="margin-top:6px;font-style:italic;font-size:8pt;color:#666;">📝 '+nota+'</div>' : '';
+  var totVend = invRows.reduce(function(s,r){return s+r.vendido;},0);
 
-  const w=window.open('','_blank','width=750,height=900');
-  w.document.write(`<!DOCTYPE html><html><head>
-  <title>Cierre de Turno</title>
-  <style>
-    @page{size:letter portrait;margin:12mm 14mm;}
-    *{box-sizing:border-box;margin:0;padding:0;}
-    body{font-family:Arial,sans-serif;color:#111;font-size:9pt;}
-    .header{border-bottom:2.5px solid #111;padding-bottom:7px;margin-bottom:10px;}
-    .brand{font-size:14pt;font-weight:900;}.brand span{color:#7c4a1e;}
-    .sub{display:flex;justify-content:space-between;margin-top:4px;}
-    .punto{font-size:11pt;font-weight:700;color:#0a2a0a;}
-    .meta{font-size:7.5pt;color:#666;text-align:right;line-height:1.6;}
-    .cajero-box{background:#f5ece0;border-left:3px solid #7c4a1e;padding:5px 10px;margin-bottom:10px;font-size:8.5pt;}
-    table{border-collapse:collapse;width:100%;margin-bottom:10px;}
-    th{background:#111;color:white;padding:3.5pt 4pt;font-size:6.5pt;text-transform:uppercase;text-align:center;border:1px solid #333;}
-    th.left{text-align:left;}
-    td{padding:2.5pt 4pt;font-size:7.5pt;border-bottom:1px solid #e0e0e0;text-align:center;}
-    td.left{text-align:left;}
-    tr:nth-child(even) td{background:#f0f0f0;}
-    tfoot td{font-weight:700;background:#e8e8e8;border-top:2px solid #111;}
-    .resumen{background:#f5ece0;border:1px solid #c8b99a;border-radius:4px;padding:10px;margin-bottom:10px;}
-    .res-row{display:flex;justify-content:space-between;padding:3px 0;font-size:8.5pt;}
-    .res-row.big{font-size:10pt;font-weight:700;border-top:1px solid #c8b99a;margin-top:4px;padding-top:6px;}
-    .firmas{display:flex;justify-content:space-between;margin-top:28px;padding:0 10px;}
-    .firma-box{text-align:center;width:170px;}
-    .firma-line{border-top:1px solid #333;padding-top:4px;font-size:7.5pt;color:#555;}
-  </style></head><body>
-  <div class="header">
-    <div class="brand">La Vaca <span>Original</span></div>
-    <div class="sub">
-      <div><div class="punto">${puntoNombre} — ${turnoNombre}</div><div style="font-size:8pt;color:#555;">${sesion.fecha} · Impreso a las ${hora}</div></div>
-      <div class="meta">Cajero: <b>${escH(sesion.cajero)}</b></div>
-    </div>
-  </div>
-  <table>
-    <thead><tr>
-      <th class="left">Producto</th><th>Precio</th>
-      <th>Ant.</th><th>Entrante</th><th>Disponible</th>
-      <th>Dev.</th><th>Inv.Final</th><th>Vendido</th><th>$ Venta</th>
-    </tr></thead>
-    <tbody>${filas}</tbody>
-    <tfoot><tr>
-      <td class="left" colspan="7">TOTALES</td>
-      <td style="font-weight:700;color:#2d6a2d">${invRows.reduce((s,r)=>s+r.vendido,0)}</td>
-      <td style="font-weight:700">${fmt(totalVentas)}</td>
-    </tr></tfoot>
-  </table>
-  <div class="resumen">
-    <div class="res-row"><span>Total ventas</span><b>${fmt(totalVentas)}</b></div>
-    <div class="res-row"><span>− Gastos</span><b>${fmt(gastos)}</b></div>
-    <div class="res-row"><span>− Pagos digitales</span><b>${fmt(digital)}</b></div>
-    <div class="res-row big"><span>💵 Efectivo a entregar</span><b style="color:#7c4a1e">${fmt(efectivo)}</b></div>
-    ${entregado>0?`<div class="res-row"><span>Dinero entregado</span><b>${fmt(entregado)}</b></div>
-    <div class="res-row"><span>Diferencia</span><b style="color:${diffCol}">${diffTxt}</b></div>`:''}
-    ${nota?`<div style="margin-top:6px;font-style:italic;font-size:8pt;color:#666;">📝 ${nota}</div>`:''}
-  </div>
-  <div class="firmas">
-    <div class="firma-box"><div class="firma-line">Firma Cajero: ${escH(sesion.cajero)}</div></div>
-    <div class="firma-box"><div class="firma-line">Firma Encargado Producción</div></div>
-  </div>
-  <scr`+'ipt>window.addEventListener("load",()=>setTimeout(()=>window.print(),400));</scr'+'ipt>
-  </body></html>`);
+  var html = '<!DOCTYPE html><html><head>'
+    + '<title>Cierre de Turno</title>'
+    + '<style>'
+    + '@page{size:letter portrait;margin:12mm 14mm;}'
+    + '*{box-sizing:border-box;margin:0;padding:0;}'
+    + 'body{font-family:Arial,sans-serif;color:#111;font-size:9pt;}'
+    + '.header{border-bottom:2.5px solid #111;padding-bottom:7px;margin-bottom:10px;}'
+    + '.brand{font-size:14pt;font-weight:900;}.brand span{color:#7c4a1e;}'
+    + '.sub{display:flex;justify-content:space-between;margin-top:4px;}'
+    + '.punto{font-size:11pt;font-weight:700;color:#0a2a0a;}'
+    + '.meta{font-size:7.5pt;color:#666;text-align:right;line-height:1.6;}'
+    + 'table{border-collapse:collapse;width:100%;margin-bottom:10px;}'
+    + 'th{background:#111;color:white;padding:3.5pt 4pt;font-size:6.5pt;text-transform:uppercase;text-align:center;border:1px solid #333;}'
+    + 'th.left{text-align:left;}'
+    + 'td{padding:2.5pt 4pt;font-size:7.5pt;border-bottom:1px solid #e0e0e0;text-align:center;}'
+    + 'td.left{text-align:left;}'
+    + 'tr:nth-child(even) td{background:#f0f0f0;}'
+    + 'tfoot td{font-weight:700;background:#e8e8e8;border-top:2px solid #111;}'
+    + '.resumen{background:#f5ece0;border:1px solid #c8b99a;border-radius:4px;padding:10px;margin-bottom:10px;}'
+    + '.res-row{display:flex;justify-content:space-between;padding:3px 0;font-size:8.5pt;}'
+    + '.res-row.big{font-size:10pt;font-weight:700;border-top:1px solid #c8b99a;margin-top:4px;padding-top:6px;}'
+    + '.firmas{display:flex;justify-content:space-between;margin-top:28px;padding:0 10px;}'
+    + '.firma-box{text-align:center;width:170px;}'
+    + '.firma-line{border-top:1px solid #333;padding-top:4px;font-size:7.5pt;color:#555;}'
+    + '</style></head><body>'
+    + '<div class="header">'
+    + '<div class="brand">La Vaca <span style="color:#7c4a1e">Original</span></div>'
+    + '<div class="sub">'
+    + '<div><div class="punto">'+puntoNombre+' — '+turnoNombre+'</div>'
+    + '<div style="font-size:8pt;color:#555;">'+sesion.fecha+' · Impreso a las '+hora+'</div></div>'
+    + '<div class="meta">Cajero: <b>'+escH(sesion.cajero)+'</b></div>'
+    + '</div></div>'
+    + '<table>'
+    + '<thead><tr>'
+    + '<th class="left">Producto</th><th>Precio</th>'
+    + '<th>Ant.</th><th>Entrante</th><th>Disponible</th>'
+    + '<th>Dev.</th><th>Inv.Final</th><th>Vendido</th><th>$ Venta</th>'
+    + '</tr></thead>'
+    + '<tbody>'+filas+'</tbody>'
+    + '<tfoot><tr>'
+    + '<td class="left" colspan="7">TOTALES</td>'
+    + '<td style="font-weight:700;color:#2d6a2d">'+totVend+'</td>'
+    + '<td style="font-weight:700">'+fmt(totalVentas)+'</td>'
+    + '</tr></tfoot>'
+    + '</table>'
+    + '<div class="resumen">'
+    + '<div class="res-row"><span>Total ventas</span><b>'+fmt(totalVentas)+'</b></div>'
+    + '<div class="res-row"><span>− Gastos</span><b>'+fmt(gastos)+'</b></div>'
+    + '<div class="res-row"><span>− Pagos digitales</span><b>'+fmt(digital)+'</b></div>'
+    + '<div class="res-row big"><span>💵 Efectivo a entregar</span><b style="color:#7c4a1e">'+fmt(efectivo)+'</b></div>'
+    + resumenExtra
+    + notaHtml
+    + '</div>'
+    + '<div class="firmas">'
+    + '<div class="firma-box"><div class="firma-line">Firma Cajero: '+escH(sesion.cajero)+'</div></div>'
+    + '<div class="firma-box"><div class="firma-line">Firma Encargado Producción</div></div>'
+    + '</div>'
+    + '</body></html>';
+
+  var w = window.open('','_blank','width=750,height=900');
+  w.document.write(html);
   w.document.close();
+  setTimeout(function(){ w.print(); }, 400);
 }
 
 // ══ UTILS ══
