@@ -489,7 +489,7 @@ function cargarInventario(){
         if(ant&&ant.snapshot) ant.snapshot.forEach(function(p){invAnt[p.id]=p.inv_final||0;});
         invRows=productos.map(function(p){
           var sv=saved&&saved.snapshot?saved.snapshot.find(function(s){return s.id===p.id;}):null;
-          return {id:p.id,name:p.name,precio:sv?(sv.precio||p.precio||0):(p.precio||0),
+          return {id:p.id,name:p.name,precio:p.precio||0, // siempre precio fresco de Supabase
             ant:sv?(sv.ant||0):(invAnt[p.id]||0),
             entrante:sv?sv.entrante:null, dev:sv?sv.dev:null, inv_final:sv?sv.inv_final:null,
             disponible:0, vendido:0, total_venta:0};
@@ -771,19 +771,34 @@ function saveAdmin(){
 
   Promise.all(updates.concat(deletes)).then(function(){
     productosBorrar = [];
-    // Actualizar precios en invRows
-    invRows.forEach(function(r){
-      var p = productos.find(function(x){return x.id===r.id;});
-      if(p) r.precio = p.precio;
+    // Recargar precios frescos de Supabase y reconstruir tabla
+    sbGet('productos','order=orden.asc,id.asc').then(function(frescos){
+      productos = frescos.filter(function(p){return p.name&&p.name.trim();})
+                         .map(function(p){return {id:p.id,name:p.name,precio:p.precio||0};});
+      // Actualizar precio en cada fila del inventario
+      invRows.forEach(function(r){
+        var p = productos.find(function(x){return x.id===r.id;});
+        if(p){ r.precio=p.precio; calcFila(r); }
+      });
+      // Ajuste inventario anterior si aplica
+      if(sesion && motivo){
+        invRows.forEach(function(r){ calcFila(r); });
+      }
+      buildTable(); recalc();
+      if(sesion) guardar();
+      setSyncStatus('ok','✓ Guardado — precios actualizados');
+      document.getElementById('adminModal').classList.remove('open');
+    }).catch(function(){ 
+      // Si falla recarga, usar los que ya tenemos
+      invRows.forEach(function(r){
+        var p=productos.find(function(x){return x.id===r.id;});
+        if(p){r.precio=p.precio;calcFila(r);}
+      });
+      buildTable(); recalc();
+      if(sesion) guardar();
+      setSyncStatus('ok','✓ Guardado');
+      document.getElementById('adminModal').classList.remove('open');
     });
-    // Ajuste inventario anterior
-    if(sesion && motivo){
-      invRows.forEach(function(r){calcFila(r);});
-    }
-    buildTable(); recalc();
-    if(sesion) guardar();
-    setSyncStatus('ok','✓ Guardado');
-    document.getElementById('adminModal').classList.remove('open');
   }).catch(function(e){ setSyncStatus('err','✗ Error'); alert('Error al guardar: '+e.message); });
 }
 
