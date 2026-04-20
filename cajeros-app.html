@@ -268,7 +268,7 @@ input[type=number]{-moz-appearance:textfield;}
       <input type="text" id="selCajero" placeholder="Tu nombre completo">
     </div>
 
-    <button class="btn-login" onclick="entrar()">Entrar a mi turno →</button>
+    <button class="btn-login" id="btnEntrar">Entrar a mi turno →</button>
   </div>
 </div>
 
@@ -442,6 +442,7 @@ function setSyncStatus(state, msg){
 
 // ══ ENTRADA ══
 function entrar(){
+  console.log('entrar() llamado');
   const punto  = document.getElementById('selPunto').value;
   const turno  = document.getElementById('selTurno').value;
   const cajero = document.getElementById('selCajero').value.trim();
@@ -891,6 +892,29 @@ function closeModal(id){ document.getElementById(id).classList.remove('open'); }
 
 // ══ INIT ══
 document.getElementById('selFecha').value = new Date().toISOString().slice(0,10);
+document.getElementById('btnEntrar').addEventListener('click', function(){
+  const punto  = document.getElementById('selPunto').value;
+  const turno  = document.getElementById('selTurno').value;
+  const cajero = document.getElementById('selCajero').value.trim();
+  const fecha  = document.getElementById('selFecha').value;
+
+  if(!punto) { alert('Selecciona el punto de venta.'); return; }
+  if(!turno) { alert('Selecciona el turno.'); return; }
+  if(!cajero){ alert('Ingresa tu nombre.'); return; }
+  if(!fecha) { alert('Selecciona la fecha.'); return; }
+
+  sesion = {punto, turno, cajero, fecha};
+
+  const puntoNombre = {autopista:'Vaca Autopista', boquia:'Vaca Boquia', tebaida:'Vaca Tebaida'}[punto];
+  const turnoNombre = turno==='manana' ? '☀ Mañana' : turno==='tarde' ? '🌙 Tarde' : '⬛ Completo';
+
+  document.getElementById('hdrSub').textContent    = puntoNombre + ' · ' + fecha;
+  document.getElementById('turnoBadge').textContent = turnoNombre + ' — ' + cajero;
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display   = 'block';
+
+  cargarInventario();
+});
 </script>
 </body>
 </html>
