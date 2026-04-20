@@ -478,8 +478,9 @@ async function cargarInventario(){
   setSyncStatus('sync','⟳ Cargando...');
   try{
     // Cargar lista de productos (de la tabla productos de producción)
-    const prods = await sbGet('productos','order=orden.asc,id.asc');
-    productos = prods.map(p=>({id:p.id, name:p.name, precio:p.precio||0, precio2:p.precio2||0}));
+    const prods = await sbGet('productos','order=orden.asc,id.asc&select=id,name,precio,precio2,orden');
+    productos = prods.map(p=>({id:p.id, name:p.name||'', precio:p.precio||0, precio2:p.precio2||0}))
+                     .filter(p=>p.name); // solo productos con nombre
 
     // Buscar turno anterior para obtener inventario final → anterior de este turno
     const turnoAnteriorKey = getTurnoAnteriorKey();
@@ -533,12 +534,15 @@ async function cargarInventario(){
     recalcResumen();
     setSyncStatus('ok','✓ Listo');
   }catch(e){
-    setSyncStatus('err','✗ Error al cargar');
-    console.error(e);
-    // Modo offline: cargar solo productos vacíos
-    invRows = productos.map(p=>({id:p.id,name:p.name,precio:p.precio||0,precio2:p.precio2||0,
-      ant:0,entrante:null,dev:null,inv_final:null,disponible:0,vendido:0,total_venta:0}));
-    buildInvTable();
+    setSyncStatus('err','✗ Error: '+e.message.slice(0,40));
+    console.error('Error cargarInventario:',e);
+    alert('Error al cargar: '+e.message);
+    // Modo sin conexión: mostrar tabla vacía con productos ya cargados
+    if(productos.length){
+      invRows = productos.map(p=>({id:p.id,name:p.name,precio:p.precio||0,precio2:p.precio2||0,
+        ant:0,entrante:null,dev:null,inv_final:null,disponible:0,vendido:0,total_venta:0}));
+      buildInvTable();
+    }
   }
 }
 
