@@ -304,6 +304,7 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
     <button class="btn btn-admin" id="btnAdminApp">⚙ Admin</button>
     <button class="btn" style="background:#1a3a2a;color:#7dbb9d;display:none;" id="btnHistorial">📋 Historial</button>
     <button class="btn" style="background:#2a1a0a;color:#c8a050;display:none;" id="btnPapelera">🗑 Papelera</button>
+    <button class="btn" style="background:#3a0a0a;color:#e88;display:none;" id="btnFaltantes">⚠ Faltantes</button>
     <button class="btn btn-imprimir" id="btnImprimir">🖨 Imprimir</button>
     <button class="btn btn-cerrar" id="btnCerrar">📅 Cerrar Turno</button>
   </div>
@@ -339,6 +340,31 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
       <button class="btn btn-cerrar" id="btnSaveAdmin">💾 Guardar cambios</button>
       <button class="btn" style="background:#eee;color:#333;" id="btnCancelAdmin">Cancelar</button>
     </div>
+  </div>
+</div>
+
+<!-- MODAL FALTANTES -->
+<div class="overlay" id="faltantesModal">
+  <div class="modal" style="max-width:560px;">
+    <button class="modal-x" onclick="document.getElementById('faltantesModal').classList.remove('open')">✕</button>
+    <div class="modal-title">⚠ Reporte de Faltantes</div>
+    <div class="modal-sub">Dinero faltante por cajero en un período</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+      <div>
+        <label style="font-size:.72rem;font-weight:600;display:block;margin-bottom:4px;">Desde</label>
+        <input type="date" id="faltDesde" style="width:100%;padding:7px 9px;border:1.5px solid var(--gris2);border-radius:6px;font-family:'Inter',sans-serif;font-size:.83rem;background:var(--gris1);">
+      </div>
+      <div>
+        <label style="font-size:.72rem;font-weight:600;display:block;margin-bottom:4px;">Hasta</label>
+        <input type="date" id="faltHasta" style="width:100%;padding:7px 9px;border:1.5px solid var(--gris2);border-radius:6px;font-family:'Inter',sans-serif;font-size:.83rem;background:var(--gris1);">
+      </div>
+    </div>
+    <div style="margin-bottom:12px;">
+      <label style="font-size:.72rem;font-weight:600;display:block;margin-bottom:4px;">Cajero (opcional — vacío = todos)</label>
+      <input type="text" id="faltCajero" placeholder="Nombre del cajero..." style="width:100%;padding:7px 9px;border:1.5px solid var(--gris2);border-radius:6px;font-family:'Inter',sans-serif;font-size:.83rem;background:var(--gris1);">
+    </div>
+    <button class="btn btn-cerrar" onclick="buscarFaltantes()" style="width:100%;margin-bottom:12px;">🔍 Buscar faltantes</button>
+    <div id="faltResultados"></div>
   </div>
 </div>
 
@@ -465,6 +491,7 @@ document.getElementById('btnCerrar').addEventListener('click', abrirCierre);
 document.getElementById('btnImprimir').addEventListener('click', imprimirTurno);
 document.getElementById('btnHistorial').addEventListener('click', abrirHistorial);
 document.getElementById('btnPapelera').addEventListener('click', abrirPapelera);
+document.getElementById('btnFaltantes').addEventListener('click', abrirFaltantes);
 document.getElementById('histX').addEventListener('click', function(){document.getElementById('historialModal').classList.remove('open');});
 document.getElementById('editTurnoX').addEventListener('click', function(){document.getElementById('editTurnoModal').classList.remove('open');});
 document.getElementById('btnCancelarEdicion').addEventListener('click', function(){document.getElementById('editTurnoModal').classList.remove('open');});
@@ -486,6 +513,8 @@ function showAdminUI(){
   if(btnH) btnH.style.display='flex';
   var btnPape=document.getElementById('btnPapelera');
   if(btnPape) btnPape.style.display='flex';
+  var btnFalt=document.getElementById('btnFaltantes');
+  if(btnFalt) btnFalt.style.display='flex';
   var btnE=document.getElementById('btnAddEntrega');
   if(btnE) btnE.style.display='block';
   var fab=document.getElementById('fabAddProd');
@@ -508,6 +537,8 @@ function showAdminUI(){
       if(bH) bH.style.display='none';
       var bPape=document.getElementById('btnPapelera');
       if(bPape) bPape.style.display='none';
+      var bFalt=document.getElementById('btnFaltantes');
+      if(bFalt) bFalt.style.display='none';
       var bE=document.getElementById('btnAddEntrega');
       if(bE) bE.style.display='none';
       var f=document.getElementById('fabAddProd');
@@ -557,6 +588,7 @@ function salir(){
   var f=document.getElementById('fabAddProd'); if(f) f.style.display='none';
   var bH=document.getElementById('btnHistorial'); if(bH) bH.style.display='none';
   var bPape=document.getElementById('btnPapelera'); if(bPape) bPape.style.display='none';
+  var bFalt=document.getElementById('btnFaltantes'); if(bFalt) bFalt.style.display='none';
   document.getElementById('loginScreen').style.display='flex';
   document.getElementById('appScreen').style.display='none';
 }
@@ -1275,7 +1307,117 @@ function imprimirTurno(){
   setTimeout(function(){w.print();},400);
 }
 
-// ── DRAG & DROP touch-friendly (solo admin) ──────
+// ── FALTANTES ────────────────────────────────────
+function abrirFaltantes(){
+  var hoy=new Date().toLocaleDateString('en-CA',{timeZone:'America/Bogota'});
+  var d=new Date(); d.setDate(1);
+  var inicio=d.toLocaleDateString('en-CA',{timeZone:'America/Bogota'});
+  document.getElementById('faltDesde').value=inicio;
+  document.getElementById('faltHasta').value=hoy;
+  document.getElementById('faltCajero').value='';
+  document.getElementById('faltResultados').innerHTML='';
+  document.getElementById('faltantesModal').classList.add('open');
+}
+
+function buscarFaltantes(){
+  var desde=document.getElementById('faltDesde').value;
+  var hasta=document.getElementById('faltHasta').value;
+  var cajeroFiltro=document.getElementById('faltCajero').value.trim().toLowerCase();
+  if(!desde||!hasta){alert('Selecciona el rango de fechas.');return;}
+  var res=document.getElementById('faltResultados');
+  res.innerHTML='<p style="color:var(--gris4);font-size:.8rem;text-align:center;padding:12px;">Buscando...</p>';
+
+  sbGet('turnos_caja','fecha=gte.'+desde+'&fecha=lte.'+hasta+'&cerrado=eq.true&eliminado=eq.false&order=cajero.asc,fecha.asc')
+    .then(function(turnos){
+      // Filtrar por cajero si se especificó
+      if(cajeroFiltro){
+        turnos=turnos.filter(function(t){return (t.cajero||'').toLowerCase().includes(cajeroFiltro);});
+      }
+      // Calcular faltante de cada turno
+      var conFaltante=turnos.filter(function(t){
+        var tv=(t.snapshot||[]).reduce(function(s,r){return s+(r.total_venta||0);},0);
+        var gas=t.gastos||0;
+        var dig=t.digital||0;
+        var ef=tv-gas-dig;
+        var ent=t.entregado||0;
+        var dif=ent-ef;
+        return dif<0; // solo faltantes
+      }).map(function(t){
+        var tv=(t.snapshot||[]).reduce(function(s,r){return s+(r.total_venta||0);},0);
+        var gas=t.gastos||0;
+        var dig=t.digital||0;
+        var ef=tv-gas-dig;
+        var ent=t.entregado||0;
+        return {cajero:t.cajero||'—',fecha:t.fecha,punto:t.punto,turno:t.turno,faltante:Math.abs(ent-ef)};
+      });
+
+      if(!conFaltante.length){
+        res.innerHTML='<div style="text-align:center;padding:16px;color:var(--verde);font-weight:700;">✔ Sin faltantes en el período</div>';
+        return;
+      }
+
+      // Agrupar por cajero
+      var porCajero={};
+      conFaltante.forEach(function(r){
+        if(!porCajero[r.cajero]) porCajero[r.cajero]={items:[],total:0};
+        porCajero[r.cajero].items.push(r);
+        porCajero[r.cajero].total+=r.faltante;
+      });
+
+      var pN={autopista:'Autopista',boquia:'Boquia',tebaida:'Tebaida'};
+      var tN={manana:'Caja Mañana',tarde:'Caja Tarde',completo:'Caja Completa'};
+
+      res.innerHTML='';
+      var textoWhatsapp='*Reporte de Faltantes*\n*Del '+desde+' al '+hasta+'*\n\n';
+
+      Object.keys(porCajero).sort().forEach(function(cajero){
+        var data=porCajero[cajero];
+        var bloque=document.createElement('div');
+        bloque.style.cssText='background:var(--gris1);border:1px solid var(--gris2);border-radius:8px;padding:12px;margin-bottom:10px;';
+
+        var titulo=document.createElement('div');
+        titulo.style.cssText='font-weight:700;font-size:.92rem;color:var(--negro);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--gris2);';
+        titulo.textContent='👤 Cajero(a): '+cajero;
+        bloque.appendChild(titulo);
+
+        textoWhatsapp+='👤 *Cajero(a): '+cajero+'*\n';
+
+        data.items.forEach(function(it){
+          var fila=document.createElement('div');
+          fila.style.cssText='display:flex;justify-content:space-between;align-items:flex-start;padding:5px 0;border-bottom:1px dotted #ddd;font-size:.82rem;';
+          // Formatear fecha dd.mm.aa
+          var parts=it.fecha.split('-');
+          var fechaFmt=parts[2]+'.'+parts[1]+'.'+parts[0].slice(2);
+          fila.innerHTML='<div>'
+            +'<div style="font-weight:600;">'+fechaFmt+' '+( pN[it.punto]||it.punto)+' '+(tN[it.turno]||it.turno)+'</div>'
+            +'</div>'
+            +'<div style="font-weight:700;color:var(--rojo);white-space:nowrap;">−'+fmt(it.faltante)+'</div>';
+          bloque.appendChild(fila);
+          textoWhatsapp+='📅 '+fechaFmt+' '+(pN[it.punto]||it.punto)+' '+(tN[it.turno]||it.turno)+'\n💰 Faltante: −'+fmt(it.faltante)+'\n';
+        });
+
+        var total=document.createElement('div');
+        total.style.cssText='display:flex;justify-content:space-between;margin-top:7px;font-weight:700;font-size:.88rem;';
+        total.innerHTML='<span>Total faltante</span><span style="color:var(--rojo);">−'+fmt(data.total)+'</span>';
+        bloque.appendChild(total);
+        res.appendChild(bloque);
+
+        textoWhatsapp+='*Total: −'+fmt(data.total)+'*\n\n';
+      });
+
+      // Botón WhatsApp
+      var btnWA=document.createElement('button');
+      btnWA.style.cssText='width:100%;padding:11px;background:#25D366;color:white;border:none;border-radius:7px;font-family:Inter,sans-serif;font-size:.88rem;font-weight:700;cursor:pointer;margin-top:4px;display:flex;align-items:center;justify-content:center;gap:6px;';
+      btnWA.innerHTML='<svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.558 4.122 1.529 5.853L0 24l6.332-1.501A11.94 11.94 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 01-5.002-1.371l-.359-.214-3.721.882.939-3.618-.235-.372A9.818 9.818 0 1112 21.818z"/></svg>'
+        +'Enviar por WhatsApp';
+      btnWA.addEventListener('click',function(){
+        var url='https://wa.me/?text='+encodeURIComponent(textoWhatsapp);
+        window.open(url,'_blank');
+      });
+      res.appendChild(btnWA);
+    })
+    .catch(function(e){res.innerHTML='<p style="color:var(--rojo);font-size:.8rem;">Error: '+e.message+'</p>';});
+}
 var dragSrcId=null;
 
 function initDrag(tr){
