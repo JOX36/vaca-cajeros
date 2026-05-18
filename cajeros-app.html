@@ -186,6 +186,10 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
       <label>Nombre del Cajero</label>
       <input type="text" id="selCajero" placeholder="Tu nombre completo">
     </div>
+    <div class="field">
+      <label>Cajero Auxiliar <span style="font-size:.7rem;color:#aaa;">(opcional)</span></label>
+      <input type="text" id="selCajeroAux" placeholder="Nombre del auxiliar (si aplica)">
+    </div>
     <button class="btn-login" id="btnEntrar">Entrar a mi turno →</button>
     <div class="admin-link"><button id="btnAdminLogin">⚙ Entrar como Administrador</button></div>
   </div>
@@ -575,17 +579,18 @@ function entrar(admin){
   var punto=document.getElementById('selPunto').value;
   var turno=document.getElementById('selTurno').value;
   var cajero=document.getElementById('selCajero').value.trim();
+  var cajeroAux=document.getElementById('selCajeroAux').value.trim();
   var fecha=document.getElementById('selFecha').value;
   if(!punto){alert('Selecciona el punto de venta.');return;}
   if(!turno){alert('Selecciona el turno.');return;}
   if(!cajero){alert('Ingresa tu nombre.');return;}
   if(!fecha){alert('Selecciona la fecha.');return;}
-  sesion={punto:punto,turno:turno,cajero:cajero,fecha:fecha};
+  sesion={punto:punto,turno:turno,cajero:cajero,cajeroAux:cajeroAux,fecha:fecha};
   isAdmin=admin;
   var pN={autopista:'Vaca Autopista',boquia:'Vaca Boquia',tebaida:'Vaca Tebaida'}[punto];
   var tN=turno==='manana'?'☀ Mañana':turno==='tarde'?'🌙 Tarde':'⬛ Completo';
   document.getElementById('hdrSub').textContent=pN+' · '+fecha;
-  document.getElementById('turnoBadge').textContent=tN+' — '+cajero;
+  document.getElementById('turnoBadge').textContent=tN+' — '+cajero+(cajeroAux?' & '+cajeroAux:'');
   if(isAdmin) showAdminUI();
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appScreen').style.display='block';
@@ -608,28 +613,26 @@ function salir(){
 // ── CARGA ────────────────────────────────────────
 function cargarInventario(){
   setSyncStatus('sync','⟳ Cargando...');
-  var antKeys=getTurnosAnterioresKeys();
   sbGet('productos_caja','order=orden.asc,id.asc')
     .then(function(prods){
       productos=prods.filter(function(p){return p.name&&p.name.trim();})
         .map(function(p){return {id:p.id,name:p.name,precio:p.precio||0};});
       var turnoKey=sesion.fecha+'_'+sesion.punto+'_'+sesion.turno;
-      // Buscar turno actual y todos los posibles anteriores
-      var queries=[
-        sbGet('turnos_caja','punto=eq.'+sesion.punto+'&turno_key=eq.'+turnoKey+'&limit=1').catch(function(){return[];})
-      ];
-      antKeys.forEach(function(k){
-        queries.push(sbGet('turnos_caja','punto=eq.'+sesion.punto+'&turno_key=eq.'+k+'&cerrado=eq.true&limit=1').catch(function(){return[];}));
-      });
-      Promise.all(queries).then(function(res){
-        var saved=res[0].length?res[0][0]:null;
-        // Tomar el primer turno anterior que tenga datos
-        var antTurno=null;
-        for(var i=1;i<res.length;i++){
-          if(res[i].length&&res[i][0].snapshot&&res[i][0].snapshot.length){
-            antTurno=res[i][0]; break;
-          }
-        }
+      Promise.all([
+        // Turno actual
+        sbGet('turnos_caja','punto=eq.'+sesion.punto+'&turno_key=eq.'+turnoKey+'&limit=1').catch(function(){return[];}),
+        // Último turno cerrado del mismo punto en fechas anteriores (cualquier distancia)
+        sbGet('turnos_caja','punto=eq.'+sesion.punto+'&cerrado=eq.true&eliminado=eq.false&fecha=lt.'+sesion.fecha+'&order=fecha.desc,turno.desc&limit=1').catch(function(){return[];}),
+        // Si es tarde: buscar AM del mismo día
+        sesion.turno==='tarde'
+          ? sbGet('turnos_caja','punto=eq.'+sesion.punto+'&turno_key=eq.'+sesion.fecha+'_'+sesion.punto+'_manana&cerrado=eq.true&eliminado=eq.false&limit=1').catch(function(){return[];})
+          : Promise.resolve([])
+      ]).then(function(res){
+        var saved   = res[0].length ? res[0][0] : null;
+        var antAyer = res[1].length && res[1][0].snapshot && res[1][0].snapshot.length ? res[1][0] : null;
+        var antAM   = res[2].length && res[2][0].snapshot && res[2][0].snapshot.length ? res[2][0] : null;
+        // Para turno tarde: priorizar AM de hoy, luego el más reciente anterior
+        var antTurno = (sesion.turno==='tarde' && antAM) ? antAM : antAyer;
         var invAnt={};
         if(antTurno&&antTurno.snapshot){
           antTurno.snapshot.forEach(function(p){
@@ -638,11 +641,9 @@ function cargarInventario(){
         }
         invRows=productos.map(function(p){
           var sv=saved&&saved.snapshot?saved.snapshot.find(function(s){return s.id===p.id;}):null;
-          // ant SIEMPRE viene del turno anterior cerrado (no del snapshot propio)
-          // así si el turno anterior se cerró después de que este turno abrió, igual se actualiza
-          var antVal = invAnt[p.id]!==undefined ? invAnt[p.id] : (sv&&sv.ant!==null&&sv.ant!==undefined?sv.ant:0);
+          var antVal=invAnt[p.id]!==undefined?invAnt[p.id]:(sv&&sv.ant!==null&&sv.ant!==undefined?sv.ant:0);
           return {id:p.id,name:p.name,precio:p.precio||0,
-            ant: antVal,
+            ant:antVal,
             entradas:sv?(sv.entradas&&sv.entradas.length?sv.entradas:(sv.entrante?[sv.entrante]:[])):[],
             entrante:sv?sv.entrante:null,dev:sv?sv.dev:null,inv_final:sv?sv.inv_final:null,pedido:null,
             disponible:0,vendido:0,total_venta:0};
@@ -650,10 +651,10 @@ function cargarInventario(){
         if(saved){
           gastos=saved.gastos_list||[];
           entregas=saved.entregas_list||[];
-          document.getElementById('inNota').value=saved.nota||'';
-          var nsEl=document.getElementById('inNotaSig'); if(nsEl) nsEl.value=saved.nota_siguiente||'';
           entregaFinal=saved.entrega_final||false;
           actualizarBtnEntregaFinal();
+          document.getElementById('inNota').value=saved.nota||'';
+          var nsEl=document.getElementById('inNotaSig'); if(nsEl) nsEl.value=saved.nota_siguiente||'';
           setTimeout(function(){
             var dEl=document.getElementById('inDatafono');
             var tEl=document.getElementById('inTransferencia');
@@ -662,27 +663,13 @@ function cargarInventario(){
           },100);
         }
         buildTable(); renderAllEntries(); recalc();
-        // Mostrar nota del turno anterior si existe
-        if(antTurno&&antTurno.nota_siguiente&&antTurno.nota_siguiente.trim()){
+        // Nota del compañero solo si es turno nuevo (no existe guardado aún)
+        if(!saved&&antTurno&&antTurno.nota_siguiente&&antTurno.nota_siguiente.trim()){
           setTimeout(function(){mostrarNotaCompañero(antTurno.nota_siguiente);},600);
         }
         setSyncStatus('ok','✓ Listo');
       }).catch(function(e){setSyncStatus('err','✗ Error');alert('Error al cargar: '+e.message);});
     }).catch(function(e){setSyncStatus('err','✗ Sin conexión');alert('Sin conexión: '+e.message);});
-}
-
-function getTurnosAnterioresKeys(){
-  var d=new Date(sesion.fecha+'T12:00:00'); d.setDate(d.getDate()-1);
-  var ayer=d.toISOString().slice(0,10);
-  if(sesion.turno==='tarde')
-    return [sesion.fecha+'_'+sesion.punto+'_manana',
-            sesion.fecha+'_'+sesion.punto+'_completo'];
-  if(sesion.turno==='manana')
-    return [ayer+'_'+sesion.punto+'_tarde',
-            ayer+'_'+sesion.punto+'_completo'];
-  // completo: tomar tarde de ayer o completo de ayer
-  return [ayer+'_'+sesion.punto+'_tarde',
-          ayer+'_'+sesion.punto+'_completo'];
 }
 
 // ── TABLA ────────────────────────────────────────
@@ -1028,7 +1015,7 @@ function guardar(){
   var key=sesion.fecha+'_'+sesion.punto+'_'+sesion.turno;
   var snap=invRows.map(function(r){return {id:r.id,name:r.name,precio:r.precio,ant:r.ant,entradas:r.entradas||[],entrante:r.entrante,dev:r.dev,inv_final:r.inv_final,pedido:r.pedido,disponible:r.disponible,vendido:r.vendido,total_venta:r.total_venta};});
   sbUpsert('turnos_caja',{
-    turno_key:key,punto:sesion.punto,turno:sesion.turno,fecha:sesion.fecha,cajero:sesion.cajero,
+    turno_key:key,punto:sesion.punto,turno:sesion.turno,fecha:sesion.fecha,cajero:sesion.cajero,cajero_aux:sesion.cajeroAux||'',
     snapshot:snap,
     gastos_list:gastos,entregas_list:entregas,
     datafono_val:parseFloat(document.getElementById('inDatafono').value)||0,
@@ -1226,7 +1213,7 @@ function confirmarCierre(){
   var key=sesion.fecha+'_'+sesion.punto+'_'+sesion.turno;
   var snap=invRows.map(function(r){return {id:r.id,name:r.name,precio:r.precio,ant:r.ant,entradas:r.entradas||[],entrante:r.entrante,dev:r.dev,inv_final:r.inv_final,pedido:r.pedido,disponible:r.disponible,vendido:r.vendido,total_venta:r.total_venta};});
   sbUpsert('turnos_caja',{
-    turno_key:key,punto:sesion.punto,turno:sesion.turno,fecha:sesion.fecha,cajero:sesion.cajero,
+    turno_key:key,punto:sesion.punto,turno:sesion.turno,fecha:sesion.fecha,cajero:sesion.cajero,cajero_aux:sesion.cajeroAux||'',
     snapshot:snap,
     gastos_list:gastos,entregas_list:entregas,
     datafono_val:parseFloat(document.getElementById('inDatafono').value)||0,
@@ -1365,22 +1352,31 @@ function buscarFaltantes(){
       if(cajeroFiltro){
         turnos=turnos.filter(function(t){return (t.cajero||'').toLowerCase().includes(cajeroFiltro);});
       }
-      // Calcular faltante de cada turno
-      var conFaltante=turnos.filter(function(t){
+      // Calcular faltante de cada turno y expandir por cajeros
+      var conFaltante=[];
+      turnos.forEach(function(t){
         var tv=(t.snapshot||[]).reduce(function(s,r){return s+(r.total_venta||0);},0);
-        var gas=t.gastos||0;
-        var dig=t.digital||0;
+        var gas=t.gastos||0; var dig=t.digital||0;
         var ef=tv-gas-dig;
         var ent=t.entregado||0;
         var dif=ent-ef;
-        return dif<0; // solo faltantes
-      }).map(function(t){
-        var tv=(t.snapshot||[]).reduce(function(s,r){return s+(r.total_venta||0);},0);
-        var gas=t.gastos||0;
-        var dig=t.digital||0;
-        var ef=tv-gas-dig;
-        var ent=t.entregado||0;
-        return {cajero:t.cajero||'—',fecha:t.fecha,punto:t.punto,turno:t.turno,faltante:Math.abs(ent-ef)};
+        if(dif>=0) return; // sin faltante
+        var faltTotal=Math.abs(dif);
+        var tieneAux=t.cajero_aux&&t.cajero_aux.trim();
+        var faltPorCajero=tieneAux?Math.round(faltTotal/2):faltTotal;
+        var compartidoCon=tieneAux?t.cajero_aux.trim():'';
+        // Cajero principal
+        conFaltante.push({
+          cajero:t.cajero||'—',fecha:t.fecha,punto:t.punto,turno:t.turno,
+          faltante:faltPorCajero,compartidoCon:compartidoCon,faltTotal:faltTotal
+        });
+        // Cajero auxiliar
+        if(tieneAux){
+          conFaltante.push({
+            cajero:t.cajero_aux.trim(),fecha:t.fecha,punto:t.punto,turno:t.turno,
+            faltante:faltPorCajero,compartidoCon:t.cajero||'—',faltTotal:faltTotal
+          });
+        }
       });
 
       if(!conFaltante.length){
@@ -1421,11 +1417,14 @@ function buscarFaltantes(){
           var parts=it.fecha.split('-');
           var fechaFmt=parts[2]+'.'+parts[1]+'.'+parts[0].slice(2);
           fila.innerHTML='<div>'
-            +'<div style="font-weight:600;">'+fechaFmt+' '+( pN[it.punto]||it.punto)+' '+(tN[it.turno]||it.turno)+'</div>'
+            +'<div style="font-weight:600;">'+fechaFmt+' '+(pN[it.punto]||it.punto)+' '+(tN[it.turno]||it.turno)+'</div>'
+            +(it.compartidoCon?'<div style="font-size:.72rem;color:var(--gris4);">Compartido con '+it.compartidoCon+' · Total turno: −'+fmt(it.faltTotal)+'</div>':'')
             +'</div>'
             +'<div style="font-weight:700;color:var(--rojo);white-space:nowrap;">−'+fmt(it.faltante)+'</div>';
           bloque.appendChild(fila);
-          textoWhatsapp+='📅 '+fechaFmt+' '+(pN[it.punto]||it.punto)+' '+(tN[it.turno]||it.turno)+'\n💰 Faltante: −'+fmt(it.faltante)+'\n';
+          textoWhatsapp+='📅 '+fechaFmt+' '+(pN[it.punto]||it.punto)+' '+(tN[it.turno]||it.turno)+'\n';
+          if(it.compartidoCon) textoWhatsapp+='👥 Compartido con '+it.compartidoCon+' (total turno: −'+fmt(it.faltTotal)+')\n';
+          textoWhatsapp+='💰 Faltante: −'+fmt(it.faltante)+'\n';
         });
 
         var total=document.createElement('div');
