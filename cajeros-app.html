@@ -277,6 +277,14 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
         <hr class="res-divider">
         <div class="res-row total"><span class="label">💵 Efectivo a entregar</span><span class="value" id="rEfectivo">$0</span></div>
         <hr class="res-divider">
+        <div class="res-row" style="background:#f5f0e8;padding:5px 8px;border-radius:5px;margin:2px 0;">
+          <span class="label" style="color:#7c4a1e;font-weight:600;">🏦 Base fija cajero</span>
+          <span class="value" style="color:#7c4a1e;">$200,000</span>
+        </div>
+        <div class="res-row" style="font-size:.7rem;color:var(--gris4);padding:0 8px;">
+          <span>La base no se entrega — siempre queda en caja</span>
+        </div>
+        <hr class="res-divider">
         <div class="res-row"><span class="label">Total entregado</span><span class="value" id="rEntregado">—</span></div>
         <div class="res-row"><span class="label">Diferencia</span><span class="value" id="rDiferencia">—</span></div>
       </div>
@@ -641,8 +649,22 @@ function buildTable(){
       tdP.className='cell-locked'; tdP.textContent=fmt(r.precio);
     }
     tr.appendChild(tdP);
-    // Anterior — solo admin puede editar (se ajusta desde panel admin)
-    var tdA=document.createElement('td'); tdA.className='cell-locked'; tdA.textContent=r.ant||'—'; tr.appendChild(tdA);
+    // Anterior — editable si admin
+    var tdA=document.createElement('td');
+    if(isAdmin){
+      var inAnt=document.createElement('input'); inAnt.type='number'; inAnt.min='0';
+      inAnt.value=r.ant||''; inAnt.placeholder='0';
+      inAnt.style.cssText='font-family:Inter,sans-serif;font-size:.78rem;width:62px;padding:3px 5px;border:1.5px solid #4a8a4a;border-radius:4px;background:#f0fff0;text-align:center;';
+      inAnt.addEventListener('change',(function(row){return function(){
+        row.ant=parseFloat(this.value)||0;
+        calcFila(row); updateFila(row); autoSave();
+        setSyncStatus('ok','✓ Anterior actualizado');
+      };})(r));
+      tdA.appendChild(inAnt);
+    } else {
+      tdA.className='cell-locked'; tdA.textContent=r.ant||'—';
+    }
+    tr.appendChild(tdA);
     // Entrante — cajero puede editar
     tr.appendChild(mkInp(r,'entrante',''));
     // Devolución — cajero puede editar
@@ -1004,7 +1026,7 @@ function imprimirTurno(){
   var ef=tv-gas-dat-tra;
   var dif=ent-ef;
   var nota=document.getElementById('inNota').value;
-  var hora=new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
+  var hora=new Date().toLocaleTimeString('es-CO',{timeZone:'America/Bogota',hour:'2-digit',minute:'2-digit'});
   var difTxt=dif===0?'✔ Cuadra':dif<0?'Falta '+fmt(Math.abs(dif)):'Sobran '+fmt(dif);
   var difCol=dif===0?'#2d6a2d':dif<0?'#b02020':'#7a4a00';
   var totVend=invRows.reduce(function(s,r){return s+r.vendido;},0);
@@ -1373,7 +1395,10 @@ function guardarEdicionTurno(){
 }
 
 // ── INIT ─────────────────────────────────────────
-document.getElementById('selFecha').value=new Date().toISOString().slice(0,10);
+// Fecha Colombia
+var hoy = new Date().toLocaleDateString('en-CA', {timeZone:'America/Bogota'});
+document.getElementById('selFecha').value = hoy;
+document.getElementById('histFecha') && (document.getElementById('histFecha').value = hoy);
 </script>
 </body>
 </html>
