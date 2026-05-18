@@ -267,6 +267,7 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
         <div class="res-block-title">Entregas de dinero en efectivo <span style="font-size:.62rem;background:#1a1a3a;color:#7a9fd4;padding:1px 6px;border-radius:3px;font-weight:700;">Solo Admin</span></div>
         <div class="entries-list" id="entregasLista"></div>
         <button class="btn-add-entry" id="btnAddEntrega" style="display:none;">＋ Agregar entrega</button>
+        <button id="btnEntregaFinal" style="display:none;width:100%;margin-top:6px;padding:8px;background:#1a4a1a;color:#7dbb7d;border:1.5px solid #4a8a4a;border-radius:6px;font-family:Inter,sans-serif;font-size:.78rem;font-weight:700;cursor:pointer;">✓ Marcar como entrega final</button>
         <div class="entry-total" id="entregaTotal">Total entregado: $0</div>
       </div>
       <div class="res-totales">
@@ -448,6 +449,7 @@ var invRows = [];
 var saveTimer = null;
 var gastos = [];
 var entregas = [];
+var entregaFinal = false;
 var productosBorrar = [];
 
 function sbGet(table,q){
@@ -501,6 +503,12 @@ document.getElementById('btnCancelarCierre').addEventListener('click', function(
 document.getElementById('inNota').addEventListener('input', autoSave);
 document.getElementById('btnAddGasto').addEventListener('click', function(){addEntry('gastos');});
 document.getElementById('btnAddEntrega').addEventListener('click', function(){addEntry('entregas');});
+document.getElementById('btnEntregaFinal').addEventListener('click', function(){
+  if(entregas.length===0){alert('Agrega al menos una entrega antes de marcar como final.');return;}
+  entregaFinal=!entregaFinal;
+  actualizarBtnEntregaFinal();
+  recalc(); autoSave();
+});
 
 // ── ADMIN UI ─────────────────────────────────────
 var adminTimer=null;
@@ -517,6 +525,8 @@ function showAdminUI(){
   if(btnFalt) btnFalt.style.display='flex';
   var btnE=document.getElementById('btnAddEntrega');
   if(btnE) btnE.style.display='block';
+  var btnEF=document.getElementById('btnEntregaFinal');
+  if(btnEF) btnEF.style.display='block';
   var fab=document.getElementById('fabAddProd');
   if(fab) fab.style.display='flex';
   renderEntries('entregas');
@@ -541,6 +551,8 @@ function showAdminUI(){
       if(bFalt) bFalt.style.display='none';
       var bE=document.getElementById('btnAddEntrega');
       if(bE) bE.style.display='none';
+      var bEF=document.getElementById('btnEntregaFinal');
+      if(bEF) bEF.style.display='none';
       var f=document.getElementById('fabAddProd');
       if(f) f.style.display='none';
       buildTable();
@@ -582,7 +594,7 @@ function entrar(admin){
 
 function salir(){
   if(!confirm('¿Salir?'))return;
-  sesion=null; isAdmin=false; invRows=[]; gastos=[]; entregas=[];
+  sesion=null; isAdmin=false; invRows=[]; gastos=[]; entregas=[]; entregaFinal=false;
   clearInterval(adminTimer);
   document.getElementById('adminBadge').style.display='none';
   var f=document.getElementById('fabAddProd'); if(f) f.style.display='none';
@@ -640,6 +652,8 @@ function cargarInventario(){
           entregas=saved.entregas_list||[];
           document.getElementById('inNota').value=saved.nota||'';
           var nsEl=document.getElementById('inNotaSig'); if(nsEl) nsEl.value=saved.nota_siguiente||'';
+          entregaFinal=saved.entrega_final||false;
+          actualizarBtnEntregaFinal();
           setTimeout(function(){
             var dEl=document.getElementById('inDatafono');
             var tEl=document.getElementById('inTransferencia');
@@ -990,11 +1004,11 @@ function recalc(){
   var ent=entregas.reduce(function(s,e){return s+(e.valor||0);},0);
   var ef=tv-gas-dat-tra;
   var dif=ent-ef;
-  document.getElementById('rTotalVentas').textContent=isAdmin?fmt(tv):'—';
+  document.getElementById('rTotalVentas').textContent=(isAdmin||entregaFinal)?fmt(tv):'—';
   document.getElementById('rGastos').textContent=fmt(gas);
   document.getElementById('rDatafono').textContent=fmt(dat);
   document.getElementById('rTransferencia').textContent=fmt(tra);
-  document.getElementById('rEfectivo').textContent=isAdmin?fmt(ef):'—';
+  document.getElementById('rEfectivo').textContent=(isAdmin||entregaFinal)?fmt(ef):'—';
   var rEnt=document.getElementById('rEntregado');
   var rDif=document.getElementById('rDiferencia');
   if(ent>0){
@@ -1024,6 +1038,7 @@ function guardar(){
     entregado:entregas.reduce(function(s,e){return s+(e.valor||0);},0),
     nota:document.getElementById('inNota').value,
     nota_siguiente:document.getElementById('inNotaSig')?document.getElementById('inNotaSig').value:'',
+    entrega_final:entregaFinal,
     cerrado:false,updated_at:new Date().toISOString()
   }).then(function(){setSyncStatus('ok','✓ Guardado');})
   .catch(function(e){setSyncStatus('err','✗ Error');console.error(e);});
@@ -1221,6 +1236,7 @@ function confirmarCierre(){
     entregado:entregas.reduce(function(s,e){return s+(e.valor||0);},0),
     nota:document.getElementById('inNota').value,
     nota_siguiente:document.getElementById('inNotaSig')?document.getElementById('inNotaSig').value:'',
+    entrega_final:entregaFinal,
     cerrado:true,updated_at:new Date().toISOString()
   }).then(function(){
     setSyncStatus('ok','✓ Cerrado');
@@ -1308,6 +1324,22 @@ function imprimirTurno(){
 }
 
 // ── FALTANTES ────────────────────────────────────
+function actualizarBtnEntregaFinal(){
+  var btn=document.getElementById('btnEntregaFinal');
+  if(!btn) return;
+  if(entregaFinal){
+    btn.textContent='✓ Entrega final registrada — toca para desmarcar';
+    btn.style.background='#0a3a0a';
+    btn.style.color='#5dbb5d';
+    btn.style.borderColor='#2d6a2d';
+  } else {
+    btn.textContent='✓ Marcar como entrega final';
+    btn.style.background='#1a4a1a';
+    btn.style.color='#7dbb7d';
+    btn.style.borderColor='#4a8a4a';
+  }
+}
+
 function abrirFaltantes(){
   var hoy=new Date().toLocaleDateString('en-CA',{timeZone:'America/Bogota'});
   var d=new Date(); d.setDate(1);
