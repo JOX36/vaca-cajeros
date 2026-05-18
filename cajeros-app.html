@@ -263,9 +263,9 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
         </div>
       </div>
       <div class="res-block">
-        <div class="res-block-title">Entregas de dinero en efectivo</div>
+        <div class="res-block-title">Entregas de dinero en efectivo <span style="font-size:.62rem;background:#1a1a3a;color:#7a9fd4;padding:1px 6px;border-radius:3px;font-weight:700;">Solo Admin</span></div>
         <div class="entries-list" id="entregasLista"></div>
-        <button class="btn-add-entry" id="btnAddEntrega">＋ Agregar entrega</button>
+        <button class="btn-add-entry" id="btnAddEntrega" style="display:none;">＋ Agregar entrega</button>
         <div class="entry-total" id="entregaTotal">Total entregado: $0</div>
       </div>
       <div class="res-totales">
@@ -289,6 +289,7 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
 
   <div class="action-bar">
     <button class="btn btn-admin" id="btnAdminApp">⚙ Admin</button>
+    <button class="btn" style="background:#1a3a2a;color:#7dbb9d;display:none;" id="btnHistorial">📋 Historial</button>
     <button class="btn btn-imprimir" id="btnImprimir">🖨 Imprimir</button>
     <button class="btn btn-cerrar" id="btnCerrar">📅 Cerrar Turno</button>
   </div>
@@ -321,6 +322,37 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
     <div class="modal-actions">
       <button class="btn btn-cerrar" id="btnSaveAdmin">💾 Guardar cambios</button>
       <button class="btn" style="background:#eee;color:#333;" id="btnCancelAdmin">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL HISTORIAL -->
+<div class="overlay" id="historialModal">
+  <div class="modal" style="max-width:580px;">
+    <button class="modal-x" id="histX">✕</button>
+    <div class="modal-title">📋 Historial de Turnos</div>
+    <div class="modal-sub">Solo turnos cerrados — acceso admin</div>
+    <div style="display:flex;gap:8px;margin-bottom:14px;align-items:flex-end;">
+      <div style="flex:1;">
+        <label style="font-size:.72rem;font-weight:600;display:block;margin-bottom:4px;">Fecha</label>
+        <input type="date" id="histFecha" style="width:100%;padding:8px 10px;border:1.5px solid var(--gris2);border-radius:6px;font-family:'Inter',sans-serif;font-size:.85rem;background:var(--gris1);">
+      </div>
+      <button class="btn btn-cerrar" onclick="buscarHistorial()" style="flex-shrink:0;padding:8px 14px;">🔍 Buscar</button>
+    </div>
+    <div id="histResultados"></div>
+  </div>
+</div>
+
+<!-- MODAL EDITAR TURNO -->
+<div class="overlay" id="editTurnoModal">
+  <div class="modal" style="max-width:640px;">
+    <button class="modal-x" id="editTurnoX">✕</button>
+    <div class="modal-title" id="editTurnoTitle">Editar Turno</div>
+    <div class="modal-sub" id="editTurnoSub"></div>
+    <div id="editTurnoBody"></div>
+    <div class="modal-actions">
+      <button class="btn btn-cerrar" id="btnGuardarEdicion">💾 Guardar cambios</button>
+      <button class="btn" style="background:#eee;color:#333;" id="btnCancelarEdicion">Cancelar</button>
     </div>
   </div>
 </div>
@@ -392,6 +424,10 @@ document.getElementById('btnSaveAdmin').addEventListener('click', saveAdmin);
 document.getElementById('btnAddProd').addEventListener('click', addProdAdmin);
 document.getElementById('btnCerrar').addEventListener('click', abrirCierre);
 document.getElementById('btnImprimir').addEventListener('click', imprimirTurno);
+document.getElementById('btnHistorial').addEventListener('click', abrirHistorial);
+document.getElementById('histX').addEventListener('click', function(){document.getElementById('historialModal').classList.remove('open');});
+document.getElementById('editTurnoX').addEventListener('click', function(){document.getElementById('editTurnoModal').classList.remove('open');});
+document.getElementById('btnCancelarEdicion').addEventListener('click', function(){document.getElementById('editTurnoModal').classList.remove('open');});
 document.getElementById('btnConfirmar').addEventListener('click', confirmarCierre);
 document.getElementById('cierreX').addEventListener('click', function(){document.getElementById('cierreModal').classList.remove('open');});
 document.getElementById('btnCancelarCierre').addEventListener('click', function(){document.getElementById('cierreModal').classList.remove('open');});
@@ -403,6 +439,12 @@ document.getElementById('btnAddEntrega').addEventListener('click', function(){ad
 function showAdminUI(){
   var badge=document.getElementById('adminBadge');
   if(badge) badge.style.display='inline-flex';
+  var btnH=document.getElementById('btnHistorial');
+  if(btnH) btnH.style.display='flex';
+  var btnE=document.getElementById('btnAddEntrega');
+  if(btnE) btnE.style.display='block';
+  // Hacer entregas editables
+  renderEntries('entregas');
 }
 
 // ── ENTRADA ──────────────────────────────────────
@@ -439,7 +481,7 @@ function salir(){
 function cargarInventario(){
   setSyncStatus('sync','⟳ Cargando...');
   var antKeys=getTurnosAnterioresKeys();
-  sbGet('productos','order=orden.asc,id.asc')
+  sbGet('productos_caja','order=orden.asc,id.asc')
     .then(function(prods){
       productos=prods.filter(function(p){return p.name&&p.name.trim();})
         .map(function(p){return {id:p.id,name:p.name,precio:p.precio||0};});
@@ -517,10 +559,8 @@ function buildTable(){
     tdDrag.style.cssText='padding:2px 4px;width:20px;';
     if(isAdmin){
       tdDrag.innerHTML='<span class="drag-handle" title="Arrastrar">⠿</span>';
-      tr.addEventListener('dragstart',onDragStart);
-      tr.addEventListener('dragover',onDragOver);
-      tr.addEventListener('drop',onDrop);
-      tr.addEventListener('dragend',onDragEnd);
+      tr.draggable=true;
+      initDrag(tr);
     }
     tr.appendChild(tdDrag);
     // Nombre
@@ -597,16 +637,26 @@ function renderEntries(tipo){
   var totalId=tipo==='gastos'?'gastoTotal':'entregaTotal';
   var totalLabel=tipo==='gastos'?'Total gastos':'Total entregado';
   var list=document.getElementById(listId); list.innerHTML='';
+  // Entregas: solo admin puede editar
+  var soloLectura = (tipo==='entregas' && !isAdmin);
   arr.forEach(function(e,i){
     var row=document.createElement('div'); row.className='entry-row';
-    var inDesc=document.createElement('input'); inDesc.type='text'; inDesc.placeholder='Descripción'; inDesc.value=e.desc||'';
-    inDesc.addEventListener('input',(function(entry){return function(){entry.desc=this.value;autoSave();};})(e));
-    var inVal=document.createElement('input'); inVal.type='number'; inVal.min='0'; inVal.placeholder='$0'; inVal.value=e.valor||'';
-    inVal.style.textAlign='right';
-    inVal.addEventListener('input',(function(entry){return function(){entry.valor=parseFloat(this.value)||0;recalc();autoSave();};})(e));
-    var btnDel=document.createElement('button'); btnDel.className='btn-remove-entry'; btnDel.textContent='✕';
-    btnDel.addEventListener('click',(function(t,idx){return function(){removeEntry(t,idx);};})(tipo,i));
-    row.appendChild(inDesc); row.appendChild(inVal); row.appendChild(btnDel);
+    if(soloLectura){
+      // Mostrar solo lectura
+      var lbl=document.createElement('span');
+      lbl.style.cssText='flex:2;font-size:.82rem;color:var(--negro);padding:4px 0;';
+      lbl.textContent=(e.desc||'Entrega')+': '+fmt(e.valor);
+      row.appendChild(lbl);
+    } else {
+      var inDesc=document.createElement('input'); inDesc.type='text'; inDesc.placeholder='Descripción'; inDesc.value=e.desc||'';
+      inDesc.addEventListener('input',(function(entry){return function(){entry.desc=this.value;autoSave();};})(e));
+      var inVal=document.createElement('input'); inVal.type='number'; inVal.min='0'; inVal.placeholder='$0'; inVal.value=e.valor||'';
+      inVal.style.textAlign='right';
+      inVal.addEventListener('input',(function(entry){return function(){entry.valor=parseFloat(this.value)||0;recalc();autoSave();};})(e));
+      var btnDel=document.createElement('button'); btnDel.className='btn-remove-entry'; btnDel.textContent='✕';
+      btnDel.addEventListener('click',(function(t,idx){return function(){removeEntry(t,idx);};})(tipo,i));
+      row.appendChild(inDesc); row.appendChild(inVal); row.appendChild(btnDel);
+    }
     list.appendChild(row);
   });
   var total=arr.reduce(function(s,e){return s+(e.valor||0);},0);
@@ -670,7 +720,7 @@ function openAdmin(){
     isAdmin=true; showAdminUI();
   }
   setSyncStatus('sync','⟳ Cargando...');
-  sbGet('productos','order=orden.asc,id.asc').then(function(prods){
+  sbGet('productos_caja','order=orden.asc,id.asc').then(function(prods){
     productos=prods.filter(function(p){return p.name&&p.name.trim();})
       .map(function(p){return {id:p.id,name:p.name,precio:p.precio||0};});
     productosBorrar=[];
@@ -749,13 +799,13 @@ function saveAdmin(){
     var data={name:p.name,precio:p.precio||0,orden:i,updated_at:new Date().toISOString()};
     if(p._new){
       data.id=p.id;
-      return fetch(SB_URL+'/rest/v1/productos',{
+      return fetch(SB_URL+'/rest/v1/productos_caja',{
         method:'POST',
         headers:Object.assign({},HEADS,{'Prefer':'resolution=merge-duplicates'}),
         body:JSON.stringify(data)
       }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t);}); delete p._new;});
     }else{
-      return fetch(SB_URL+'/rest/v1/productos?id=eq.'+p.id,{
+      return fetch(SB_URL+'/rest/v1/productos_caja?id=eq.'+p.id,{
         method:'PATCH',
         headers:Object.assign({},HEADS,{'Prefer':'return=minimal'}),
         body:JSON.stringify({precio:p.precio||0,orden:i,updated_at:new Date().toISOString()})
@@ -763,12 +813,12 @@ function saveAdmin(){
     }
   });
   var deletes=productosBorrar.map(function(id){
-    return fetch(SB_URL+'/rest/v1/productos?id=eq.'+id,{method:'DELETE',headers:HEADS})
+    return fetch(SB_URL+'/rest/v1/productos_caja?id=eq.'+id,{method:'DELETE',headers:HEADS})
       .then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t);});});
   });
   Promise.all(updates.concat(deletes)).then(function(){
     productosBorrar=[];
-    sbGet('productos','order=orden.asc,id.asc').then(function(frescos){
+    sbGet('productos_caja','order=orden.asc,id.asc').then(function(frescos){
       productos=frescos.filter(function(p){return p.name&&p.name.trim();})
         .map(function(p){return {id:p.id,name:p.name,precio:p.precio||0};});
       invRows.forEach(function(r){
@@ -794,17 +844,22 @@ function saveAdmin(){
 
 // ── CIERRE ───────────────────────────────────────
 function abrirCierre(){
+  // Validar que haya entregas registradas
+  var ent=entregas.reduce(function(s,e){return s+(e.valor||0);},0);
+  if(!entregas.length || ent<=0){
+    alert('❌ No se puede cerrar el turno.\n\nDebe registrar al menos una entrega de dinero en efectivo.\n\nSolicita al administrador que registre las entregas.');
+    return;
+  }
   var tv=invRows.reduce(function(s,r){return s+r.total_venta;},0);
   var gas=gastos.reduce(function(s,e){return s+(e.valor||0);},0);
   var dat=parseFloat(document.getElementById('inDatafono')?document.getElementById('inDatafono').value:0)||0;
   var tra=parseFloat(document.getElementById('inTransferencia')?document.getElementById('inTransferencia').value:0)||0;
-  var ent=entregas.reduce(function(s,e){return s+(e.valor||0);},0);
   var ef=tv-gas-dat-tra;
   var dif=ent-ef;
   var pN={autopista:'Vaca Autopista',boquia:'Vaca Boquia',tebaida:'Vaca Tebaida'}[sesion.punto];
   var tN=sesion.turno==='manana'?'☀ Mañana':sesion.turno==='tarde'?'🌙 Tarde':'⬛ Completo';
   var nota=document.getElementById('inNota').value;
-  var difTxt=dif===0?'✔ Cuadra':dif<0?'Falta '+fmt(Math.abs(dif)):'Sobran '+fmt(dif);
+  var difTxt=dif===0?'✔ Cuadra exacto':dif<0?'⚠ Falta '+fmt(Math.abs(dif)):'⚠ Sobran '+fmt(dif);
   var difCol=dif===0?'#2d6a2d':dif<0?'#b02020':'#7a4a00';
   document.getElementById('cierreResumen').textContent=pN+' · '+tN+' · '+sesion.fecha+' · '+sesion.cajero;
   var det='<div style="background:var(--gris1);border-radius:6px;padding:11px;font-size:.82rem;">'
@@ -813,7 +868,8 @@ function abrirCierre(){
     +'<div style="display:flex;justify-content:space-between;margin-bottom:5px;"><span>Datáfono</span><b>'+fmt(dat)+'</b></div>'
     +'<div style="display:flex;justify-content:space-between;margin-bottom:5px;"><span>Transferencias</span><b>'+fmt(tra)+'</b></div>'
     +'<div style="display:flex;justify-content:space-between;margin-bottom:5px;border-top:1px solid var(--gris2);padding-top:5px;"><span><b>Efectivo a entregar</b></span><b style="color:var(--madera)">'+fmt(ef)+'</b></div>'
-    +(ent>0?'<div style="display:flex;justify-content:space-between;"><span>Diferencia</span><b style="color:'+difCol+'">'+difTxt+'</b></div>':'')
+    +'<div style="display:flex;justify-content:space-between;margin-bottom:5px;"><span>Total entregado</span><b>'+fmt(ent)+'</b></div>'
+    +'<div style="display:flex;justify-content:space-between;padding:6px 0;background:'+(dif===0?'#f0fff0':dif<0?'#fff0f0':'#fff8e0')+';border-radius:4px;padding:5px 8px;margin-top:3px;"><span><b>Diferencia</b></span><b style="color:'+difCol+'">'+difTxt+'</b></div>'
     +(nota?'<div style="margin-top:7px;font-style:italic;color:var(--gris4);font-size:.78rem;">📝 '+nota+'</div>':'')
     +'</div>';
   document.getElementById('cierreDetalle').innerHTML=det;
@@ -919,42 +975,272 @@ function imprimirTurno(){
   setTimeout(function(){w.print();},400);
 }
 
-// ── DRAG & DROP (solo admin) ──────────────────────
+// ── DRAG & DROP touch-friendly (solo admin) ──────
 var dragSrcId=null;
-function onDragStart(e){
-  dragSrcId=this.dataset.id;
-  e.dataTransfer.effectAllowed='move';
+
+function initDrag(tr){
+  // Desktop
+  tr.addEventListener('dragstart',function(e){
+    dragSrcId=this.dataset.id;
+    e.dataTransfer.effectAllowed='move';
+    this.style.opacity='0.5';
+  });
+  tr.addEventListener('dragover',function(e){
+    e.preventDefault();
+    document.querySelectorAll('#invBody tr').forEach(function(t){t.classList.remove('drag-over');});
+    this.classList.add('drag-over');
+  });
+  tr.addEventListener('drop',function(e){
+    e.preventDefault();
+    doReorder(dragSrcId, this.dataset.id);
+  });
+  tr.addEventListener('dragend',function(){
+    this.style.opacity='';
+    document.querySelectorAll('#invBody tr').forEach(function(t){t.classList.remove('drag-over');});
+  });
+  // Touch (Android)
+  var handle=tr.querySelector('.drag-handle');
+  if(!handle) return;
+  var lastOver=null;
+  handle.addEventListener('touchstart',function(e){
+    dragSrcId=tr.dataset.id;
+    tr.style.opacity='0.6';
+    e.preventDefault();
+  },{passive:false});
+  handle.addEventListener('touchmove',function(e){
+    e.preventDefault();
+    var touch=e.touches[0];
+    var el=document.elementFromPoint(touch.clientX,touch.clientY);
+    var targetTr=el?el.closest('#invBody tr'):null;
+    document.querySelectorAll('#invBody tr').forEach(function(t){t.classList.remove('drag-over');});
+    if(targetTr&&targetTr.dataset.id!==dragSrcId){targetTr.classList.add('drag-over');lastOver=targetTr;}
+  },{passive:false});
+  handle.addEventListener('touchend',function(){
+    tr.style.opacity='';
+    document.querySelectorAll('#invBody tr').forEach(function(t){t.classList.remove('drag-over');});
+    if(lastOver&&lastOver.dataset.id!==dragSrcId) doReorder(dragSrcId,lastOver.dataset.id);
+    lastOver=null; dragSrcId=null;
+  });
 }
-function onDragOver(e){
-  e.preventDefault();
-  e.dataTransfer.dropEffect='move';
-  document.querySelectorAll('#invBody tr').forEach(function(t){t.classList.remove('drag-over');});
-  this.classList.add('drag-over');
-}
-function onDrop(e){
-  e.preventDefault();
-  var targetId=this.dataset.id;
-  if(dragSrcId===targetId)return;
-  var srcIdx=invRows.findIndex(function(r){return r.id===dragSrcId;});
-  var tgtIdx=invRows.findIndex(function(r){return r.id===targetId;});
-  if(srcIdx<0||tgtIdx<0)return;
-  var moved=invRows.splice(srcIdx,1)[0];
-  invRows.splice(tgtIdx,0,moved);
+
+function doReorder(srcId,tgtId){
+  if(!srcId||!tgtId||srcId===tgtId) return;
+  var si=invRows.findIndex(function(r){return r.id===srcId;});
+  var ti=invRows.findIndex(function(r){return r.id===tgtId;});
+  if(si<0||ti<0) return;
+  var moved=invRows.splice(si,1)[0];
+  invRows.splice(ti,0,moved);
   buildTable();
-  // Guardar nuevo orden en productos
   setSyncStatus('sync','⟳ Guardando orden...');
-  var updates=invRows.map(function(r,i){
-    return fetch(SB_URL+'/rest/v1/productos?id=eq.'+r.id,{
+  Promise.all(invRows.map(function(r,i){
+    return fetch(SB_URL+'/rest/v1/productos_caja?id=eq.'+r.id,{
       method:'PATCH',
       headers:Object.assign({},HEADS,{'Prefer':'return=minimal'}),
       body:JSON.stringify({orden:i,updated_at:new Date().toISOString()})
     });
-  });
-  Promise.all(updates).then(function(){setSyncStatus('ok','✓ Orden guardado');})
-    .catch(function(){setSyncStatus('err','✗ Error al guardar orden');});
+  })).then(function(){setSyncStatus('ok','✓ Orden guardado');})
+     .catch(function(){setSyncStatus('err','✗ Error al guardar orden');});
 }
-function onDragEnd(){
-  document.querySelectorAll('#invBody tr').forEach(function(t){t.classList.remove('drag-over');});
+
+// ── HISTORIAL ────────────────────────────────────
+var turnoEditando = null;
+
+function abrirHistorial(){
+  document.getElementById('histFecha').value = new Date().toISOString().slice(0,10);
+  document.getElementById('histResultados').innerHTML='';
+  document.getElementById('historialModal').classList.add('open');
+}
+
+function buscarHistorial(){
+  var fecha = document.getElementById('histFecha').value;
+  if(!fecha){alert('Selecciona una fecha.');return;}
+  var res = document.getElementById('histResultados');
+  res.innerHTML='<p style="color:var(--gris4);font-size:.8rem;">Buscando...</p>';
+  sbGet('turnos_caja','fecha=eq.'+fecha+'&cerrado=eq.true&order=punto.asc,turno.asc')
+    .then(function(turnos){
+      if(!turnos.length){
+        res.innerHTML='<p style="color:var(--gris4);font-size:.8rem;padding:12px 0;text-align:center;">No hay turnos cerrados para esta fecha.</p>';
+        return;
+      }
+      var pN={autopista:'Vaca Autopista',boquia:'Vaca Boquia',tebaida:'Vaca Tebaida'};
+      var tN={manana:'☀ Mañana',tarde:'🌙 Tarde',completo:'⬛ Completo'};
+      res.innerHTML='';
+      turnos.forEach(function(t){
+        var tv=(t.snapshot||[]).reduce(function(s,r){return s+(r.total_venta||0);},0);
+        var ent=(t.entregas_list||[]).reduce(function(s,e){return s+(e.valor||0);},0);
+        var gas=t.gastos||0;
+        var dig=t.digital||0;
+        var ef=tv-gas-dig;
+        var dif=ent-ef;
+        var difTxt=dif===0?'✔ Cuadra':dif<0?'Falta '+fmt(Math.abs(dif)):'Sobran '+fmt(dif);
+        var difCol=dif===0?'#2d6a2d':dif<0?'#b02020':'#7a4a00';
+        var card=document.createElement('div');
+        card.style.cssText='background:var(--gris1);border:1px solid var(--gris2);border-radius:8px;padding:12px;margin-bottom:8px;cursor:pointer;';
+        card.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;">'
+          +'<div>'
+          +'<div style="font-weight:700;font-size:.88rem;">'+(pN[t.punto]||t.punto)+' — '+(tN[t.turno]||t.turno)+'</div>'
+          +'<div style="font-size:.74rem;color:var(--gris4);margin-top:2px;">Cajero: '+escH(t.cajero||'—')+'</div>'
+          +'</div>'
+          +'<div style="text-align:right;">'
+          +'<div style="font-weight:700;color:var(--madera);font-size:.88rem;">'+fmt(tv)+'</div>'
+          +'<div style="font-size:.72rem;font-weight:700;color:'+difCol+';">'+difTxt+'</div>'
+          +'</div>'
+          +'</div>';
+        card.addEventListener('click',(function(turno){return function(){abrirEditarTurno(turno);};})(t));
+        res.appendChild(card);
+      });
+    }).catch(function(e){res.innerHTML='<p style="color:var(--rojo);font-size:.8rem;">Error: '+e.message+'</p>';});
+}
+
+function abrirEditarTurno(t){
+  turnoEditando = JSON.parse(JSON.stringify(t)); // copia profunda
+  var pN={autopista:'Vaca Autopista',boquia:'Vaca Boquia',tebaida:'Vaca Tebaida'};
+  var tN={manana:'☀ Mañana',tarde:'🌙 Tarde',completo:'⬛ Completo'};
+  document.getElementById('editTurnoTitle').textContent='✏ Editar: '+(pN[t.punto]||t.punto)+' — '+(tN[t.turno]||t.turno);
+  document.getElementById('editTurnoSub').textContent=t.fecha+' · Cajero: '+(t.cajero||'—');
+  var body=document.getElementById('editTurnoBody');
+  body.innerHTML='';
+
+  // Tabla inventario
+  var secInv=document.createElement('div');
+  secInv.innerHTML='<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--gris4);margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--gris2);">Inventario</div>';
+  var snap=turnoEditando.snapshot||[];
+  var tbl=document.createElement('table');
+  tbl.style.cssText='width:100%;border-collapse:collapse;font-size:.78rem;margin-bottom:12px;';
+  tbl.innerHTML='<thead><tr style="background:var(--negro);color:white;">'
+    +'<th style="text-align:left;padding:5px 7px;">Producto</th>'
+    +'<th style="padding:5px 7px;">Ant</th><th style="padding:5px 7px;">Entr</th>'
+    +'<th style="padding:5px 7px;">Dev</th><th style="padding:5px 7px;">Final</th>'
+    +'<th style="padding:5px 7px;color:#7dbb7d;">Vendido</th>'
+    +'</tr></thead>';
+  var tbody=document.createElement('tbody');
+  snap.forEach(function(r,i){
+    var tr=document.createElement('tr');
+    tr.style.borderBottom='1px solid var(--gris2)';
+    var fields=['ant','entrante','dev','inv_final'];
+    var html='<td style="padding:4px 7px;font-weight:500;">'+escH(r.name)+'</td>';
+    fields.forEach(function(f){
+      html+='<td style="padding:3px;"><input type="number" value="'+(r[f]!==null&&r[f]!==undefined?r[f]:'')+'" '
+        +'style="width:54px;padding:3px 4px;border:1.5px solid var(--gris2);border-radius:4px;font-size:.75rem;text-align:center;background:var(--gris1);" '
+        +'data-idx="'+i+'" data-field="'+f+'"></td>';
+    });
+    // Vendido calculado
+    var disp=(r.ant||0)+(r.entrante||0)-(r.dev||0);
+    var vend=r.inv_final!==null&&r.inv_final!==undefined?Math.max(0,disp-(r.inv_final||0)):0;
+    html+='<td style="padding:4px 7px;font-weight:700;color:var(--verde);">'+vend+'</td>';
+    tr.innerHTML=html;
+    tbody.appendChild(tr);
+  });
+  tbl.appendChild(tbody);
+  secInv.appendChild(tbl);
+  // Escuchar cambios en inputs de inventario
+  tbl.addEventListener('input',function(e){
+    var inp=e.target;
+    if(inp.tagName!=='INPUT')return;
+    var idx=parseInt(inp.dataset.idx);
+    var field=inp.dataset.field;
+    turnoEditando.snapshot[idx][field]=inp.value===''?null:parseFloat(inp.value);
+    // Recalcular vendido
+    var r=turnoEditando.snapshot[idx];
+    var disp=(r.ant||0)+(r.entrante||0)-(r.dev||0);
+    var vend=r.inv_final!==null&&r.inv_final!==undefined?Math.max(0,disp-(r.inv_final||0)):0;
+    // Actualizar celda vendido
+    var row=tbody.querySelectorAll('tr')[idx];
+    if(row) row.lastElementChild.textContent=vend;
+  });
+  body.appendChild(secInv);
+
+  // Gastos
+  var secGas=document.createElement('div');
+  secGas.style.marginBottom='10px';
+  secGas.innerHTML='<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--gris4);margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--gris2);">Gastos</div>';
+  var gasLista=document.createElement('div'); gasLista.id='editGastosLista';
+  renderEditEntradas(gasLista, turnoEditando.gastos_list||[], 'gastos_list');
+  var btnAddG=document.createElement('button'); btnAddG.className='btn-add-entry'; btnAddG.textContent='＋ Agregar gasto';
+  btnAddG.addEventListener('click',function(){turnoEditando.gastos_list=turnoEditando.gastos_list||[];turnoEditando.gastos_list.push({desc:'',valor:0});renderEditEntradas(gasLista,turnoEditando.gastos_list,'gastos_list');});
+  secGas.appendChild(gasLista); secGas.appendChild(btnAddG);
+  body.appendChild(secGas);
+
+  // Entregas
+  var secEnt=document.createElement('div');
+  secEnt.style.marginBottom='10px';
+  secEnt.innerHTML='<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--gris4);margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--gris2);">Entregas de efectivo</div>';
+  var entLista=document.createElement('div'); entLista.id='editEntregasLista';
+  renderEditEntradas(entLista, turnoEditando.entregas_list||[], 'entregas_list');
+  var btnAddE=document.createElement('button'); btnAddE.className='btn-add-entry'; btnAddE.textContent='＋ Agregar entrega';
+  btnAddE.addEventListener('click',function(){turnoEditando.entregas_list=turnoEditando.entregas_list||[];turnoEditando.entregas_list.push({desc:'',valor:0});renderEditEntradas(entLista,turnoEditando.entregas_list,'entregas_list');});
+  secEnt.appendChild(entLista); secEnt.appendChild(btnAddE);
+  body.appendChild(secEnt);
+
+  // Datáfono / Transferencia / Nota
+  var secExtra=document.createElement('div');
+  secExtra.innerHTML='<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--gris4);margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--gris2);">Otros</div>'
+    +'<div style="display:flex;gap:8px;margin-bottom:8px;">'
+    +'<div style="flex:1;"><label style="font-size:.7rem;font-weight:600;display:block;margin-bottom:3px;">Datáfono</label>'
+    +'<input type="number" id="editDatafono" value="'+(t.datafono_val||0)+'" style="width:100%;padding:6px 8px;border:1.5px solid var(--gris2);border-radius:5px;font-family:Inter,sans-serif;font-size:.83rem;background:var(--gris1);"></div>'
+    +'<div style="flex:1;"><label style="font-size:.7rem;font-weight:600;display:block;margin-bottom:3px;">Transferencia</label>'
+    +'<input type="number" id="editTransferencia" value="'+(t.transferencia_val||0)+'" style="width:100%;padding:6px 8px;border:1.5px solid var(--gris2);border-radius:5px;font-family:Inter,sans-serif;font-size:.83rem;background:var(--gris1);"></div>'
+    +'</div>'
+    +'<div><label style="font-size:.7rem;font-weight:600;display:block;margin-bottom:3px;">Observaciones</label>'
+    +'<input type="text" id="editNota" value="'+escH(t.nota||'')+'" style="width:100%;padding:6px 8px;border:1.5px solid var(--gris2);border-radius:5px;font-family:Inter,sans-serif;font-size:.83rem;background:var(--gris1);"></div>';
+  body.appendChild(secExtra);
+
+  document.getElementById('historialModal').classList.remove('open');
+  document.getElementById('editTurnoModal').classList.add('open');
+
+  document.getElementById('btnGuardarEdicion').onclick=guardarEdicionTurno;
+}
+
+function renderEditEntradas(container, arr, field){
+  container.innerHTML='';
+  arr.forEach(function(e,i){
+    var row=document.createElement('div'); row.className='entry-row';
+    var inDesc=document.createElement('input'); inDesc.type='text'; inDesc.placeholder='Descripción'; inDesc.value=e.desc||'';
+    inDesc.addEventListener('input',(function(entry){return function(){entry.desc=this.value;};})(e));
+    var inVal=document.createElement('input'); inVal.type='number'; inVal.min='0'; inVal.placeholder='$0'; inVal.value=e.valor||'';
+    inVal.style.textAlign='right';
+    inVal.addEventListener('input',(function(entry){return function(){entry.valor=parseFloat(this.value)||0;};})(e));
+    var btnDel=document.createElement('button'); btnDel.className='btn-remove-entry'; btnDel.textContent='✕';
+    btnDel.addEventListener('click',(function(a,idx,c,f){return function(){a.splice(idx,1);renderEditEntradas(c,a,f);};})(arr,i,container,field));
+    row.appendChild(inDesc); row.appendChild(inVal); row.appendChild(btnDel);
+    container.appendChild(row);
+  });
+}
+
+function guardarEdicionTurno(){
+  if(!turnoEditando) return;
+  setSyncStatus('sync','⟳ Guardando...');
+  // Recalcular totales
+  var snap=turnoEditando.snapshot||[];
+  snap.forEach(function(r){
+    var disp=(r.ant||0)+(r.entrante||0)-(r.dev||0);
+    r.disponible=disp;
+    r.vendido=r.inv_final!==null&&r.inv_final!==undefined?Math.max(0,disp-(r.inv_final||0)):0;
+    r.total_venta=r.vendido*(r.precio||0);
+  });
+  var dat=parseFloat(document.getElementById('editDatafono').value)||0;
+  var tra=parseFloat(document.getElementById('editTransferencia').value)||0;
+  var nota=document.getElementById('editNota').value;
+  var tv=snap.reduce(function(s,r){return s+(r.total_venta||0);},0);
+  var gas=(turnoEditando.gastos_list||[]).reduce(function(s,e){return s+(e.valor||0);},0);
+  var ent=(turnoEditando.entregas_list||[]).reduce(function(s,e){return s+(e.valor||0);},0);
+  sbUpsert('turnos_caja',{
+    turno_key:turnoEditando.turno_key,
+    punto:turnoEditando.punto, turno:turnoEditando.turno,
+    fecha:turnoEditando.fecha, cajero:turnoEditando.cajero,
+    snapshot:snap,
+    gastos_list:turnoEditando.gastos_list||[],
+    entregas_list:turnoEditando.entregas_list||[],
+    datafono_val:dat, transferencia_val:tra,
+    gastos:gas, digital:dat+tra, entregado:ent,
+    nota:nota, cerrado:true,
+    updated_at:new Date().toISOString()
+  }).then(function(){
+    setSyncStatus('ok','✓ Turno actualizado');
+    document.getElementById('editTurnoModal').classList.remove('open');
+    document.getElementById('historialModal').classList.add('open');
+    buscarHistorial();
+  }).catch(function(e){setSyncStatus('err','✗ Error');alert('Error: '+e.message);});
 }
 
 // ── INIT ─────────────────────────────────────────
