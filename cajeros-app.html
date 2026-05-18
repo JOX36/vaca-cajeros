@@ -222,13 +222,14 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
           <th class="th-dev col-sep">Dev.</th>
           <th class="th-disp col-sep">Disponible</th>
           <th class="th-base col-sep">Inv.Final</th>
+          <th style="background:#2a1a3a!important;color:#c8a8f0;" class="col-sep">Pedido</th>
           <th class="th-vend col-sep">Vendido</th>
           <th class="th-vend" id="thMoney">$ Venta</th>
         </tr></thead>
         <tbody id="invBody"></tbody>
         <tfoot>
           <tr style="background:var(--gris1);">
-            <td class="left" colspan="7" style="font-weight:700;font-size:.74rem;padding:7px;">TOTALES</td>
+            <td class="left" colspan="8" style="font-weight:700;font-size:.74rem;padding:7px;">TOTALES</td>
             <td style="font-weight:700;color:var(--verde);padding:7px;" id="ftVendido">—</td>
             <td style="font-weight:700;color:var(--verde);padding:7px;" id="ftDinero">—</td>
           </tr>
@@ -290,7 +291,11 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
       </div>
       <div class="nota-field">
         <label>Observaciones del turno</label>
-        <input type="text" id="inNota" placeholder="Notas, novedades...">
+        <input type="text" id="inNota" placeholder="Notas, novedades..." oninput="autoSave()">
+      </div>
+      <div class="nota-field" style="margin-top:8px;">
+        <label style="color:#7c4a1e;">💬 Nota para el siguiente turno</label>
+        <input type="text" id="inNotaSig" placeholder="Mensaje para tu compañero..." oninput="autoSave()">
       </div>
     </div>
   </div>
@@ -298,6 +303,7 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
   <div class="action-bar">
     <button class="btn btn-admin" id="btnAdminApp">⚙ Admin</button>
     <button class="btn" style="background:#1a3a2a;color:#7dbb9d;display:none;" id="btnHistorial">📋 Historial</button>
+    <button class="btn" style="background:#2a1a0a;color:#c8a050;display:none;" id="btnPapelera">🗑 Papelera</button>
     <button class="btn btn-imprimir" id="btnImprimir">🖨 Imprimir</button>
     <button class="btn btn-cerrar" id="btnCerrar">📅 Cerrar Turno</button>
   </div>
@@ -364,6 +370,26 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
       <button class="btn btn-cerrar" id="btnGuardarEdicion">💾 Guardar cambios</button>
       <button class="btn" style="background:#eee;color:#333;" id="btnCancelarEdicion">Cancelar</button>
     </div>
+  </div>
+</div>
+
+<!-- MODAL NOTA COMPAÑERO -->
+<div class="overlay" id="notaCompModal">
+  <div class="modal modal-sm" style="text-align:center;">
+    <div style="font-size:2rem;margin-bottom:8px;">💬</div>
+    <div class="modal-title">Mensaje de tu compañero</div>
+    <div id="notaCompTexto" style="background:var(--gris1);border-radius:8px;padding:14px;margin:12px 0;font-size:.9rem;font-style:italic;color:var(--negro);text-align:left;"></div>
+    <button class="btn btn-cerrar" onclick="document.getElementById('notaCompModal').classList.remove('open')" style="width:100%;">✓ Entendido</button>
+  </div>
+</div>
+
+<!-- MODAL PAPELERA -->
+<div class="overlay" id="papeModal">
+  <div class="modal" style="max-width:520px;">
+    <button class="modal-x" onclick="document.getElementById('papeModal').classList.remove('open')">✕</button>
+    <div class="modal-title">🗑 Papelera</div>
+    <div class="modal-sub">Turnos eliminados — puedes restaurarlos</div>
+    <div id="papeResultados"><p style="color:var(--gris4);font-size:.8rem;text-align:center;padding:12px;">Cargando...</p></div>
   </div>
 </div>
 
@@ -438,6 +464,7 @@ document.getElementById('btnAddProd').addEventListener('click', addProdAdmin);
 document.getElementById('btnCerrar').addEventListener('click', abrirCierre);
 document.getElementById('btnImprimir').addEventListener('click', imprimirTurno);
 document.getElementById('btnHistorial').addEventListener('click', abrirHistorial);
+document.getElementById('btnPapelera').addEventListener('click', abrirPapelera);
 document.getElementById('histX').addEventListener('click', function(){document.getElementById('historialModal').classList.remove('open');});
 document.getElementById('editTurnoX').addEventListener('click', function(){document.getElementById('editTurnoModal').classList.remove('open');});
 document.getElementById('btnCancelarEdicion').addEventListener('click', function(){document.getElementById('editTurnoModal').classList.remove('open');});
@@ -457,6 +484,8 @@ function showAdminUI(){
   if(badge) badge.style.display='inline-flex';
   var btnH=document.getElementById('btnHistorial');
   if(btnH) btnH.style.display='flex';
+  var btnPape=document.getElementById('btnPapelera');
+  if(btnPape) btnPape.style.display='flex';
   var btnE=document.getElementById('btnAddEntrega');
   if(btnE) btnE.style.display='block';
   var fab=document.getElementById('fabAddProd');
@@ -477,6 +506,8 @@ function showAdminUI(){
       if(b){b.style.display='none'; b.textContent='🔑 Admin';}
       var bH=document.getElementById('btnHistorial');
       if(bH) bH.style.display='none';
+      var bPape=document.getElementById('btnPapelera');
+      if(bPape) bPape.style.display='none';
       var bE=document.getElementById('btnAddEntrega');
       if(bE) bE.style.display='none';
       var f=document.getElementById('fabAddProd');
@@ -525,6 +556,7 @@ function salir(){
   document.getElementById('adminBadge').style.display='none';
   var f=document.getElementById('fabAddProd'); if(f) f.style.display='none';
   var bH=document.getElementById('btnHistorial'); if(bH) bH.style.display='none';
+  var bPape=document.getElementById('btnPapelera'); if(bPape) bPape.style.display='none';
   document.getElementById('loginScreen').style.display='flex';
   document.getElementById('appScreen').style.display='none';
 }
@@ -568,13 +600,14 @@ function cargarInventario(){
           return {id:p.id,name:p.name,precio:p.precio||0,
             ant: antVal,
             entradas:sv?(sv.entradas&&sv.entradas.length?sv.entradas:(sv.entrante?[sv.entrante]:[])):[],
-            entrante:sv?sv.entrante:null,dev:sv?sv.dev:null,inv_final:sv?sv.inv_final:null,
+            entrante:sv?sv.entrante:null,dev:sv?sv.dev:null,inv_final:sv?sv.inv_final:null,pedido:null,
             disponible:0,vendido:0,total_venta:0};
         });
         if(saved){
           gastos=saved.gastos_list||[];
           entregas=saved.entregas_list||[];
           document.getElementById('inNota').value=saved.nota||'';
+          var nsEl=document.getElementById('inNotaSig'); if(nsEl) nsEl.value=saved.nota_siguiente||'';
           setTimeout(function(){
             var dEl=document.getElementById('inDatafono');
             var tEl=document.getElementById('inTransferencia');
@@ -583,6 +616,10 @@ function cargarInventario(){
           },100);
         }
         buildTable(); renderAllEntries(); recalc();
+        // Mostrar nota del turno anterior si existe
+        if(antTurno&&antTurno.nota_siguiente&&antTurno.nota_siguiente.trim()){
+          setTimeout(function(){mostrarNotaCompañero(antTurno.nota_siguiente);},600);
+        }
         setSyncStatus('ok','✓ Listo');
       }).catch(function(e){setSyncStatus('err','✗ Error');alert('Error al cargar: '+e.message);});
     }).catch(function(e){setSyncStatus('err','✗ Sin conexión');alert('Sin conexión: '+e.message);});
@@ -685,7 +722,7 @@ function buildTable(){
     var tdD=document.createElement('td'); tdD.className='cell-calc cell-disp'; tdD.id='disp-'+r.id; tdD.textContent=r.disponible||''; tr.appendChild(tdD);
     // Inv Final — cajero puede editar
     var tdFin=mkInp(r,'inv_final','#6a90d0');
-    // Agregar validación visual
+    // Validación visual si excede disponible
     var inpFin=tdFin.querySelector('input');
     if(inpFin){
       inpFin.addEventListener('input',(function(row,td){return function(){
@@ -711,6 +748,17 @@ function buildTable(){
       };})(r,tdFin));
     }
     tr.appendChild(tdFin);
+    // Pedido para siguiente turno
+    var tdPed=document.createElement('td'); tdPed.style.cssText='padding:2px 4px;';
+    var inPed=document.createElement('input'); inPed.type='number'; inPed.min='0'; inPed.placeholder='—';
+    inPed.value=(r.pedido!==null&&r.pedido!==undefined)?r.pedido:'';
+    inPed.style.cssText='font-family:Inter,sans-serif;font-size:.78rem;width:50px;padding:3px 5px;border:1.5px solid #6a3a8a;border-radius:4px;background:#f8f0ff;text-align:center;';
+    inPed.title='Pedido para el siguiente turno';
+    inPed.addEventListener('input',(function(row){return function(){
+      row.pedido=this.value===''?null:parseFloat(this.value);
+      autoSave();
+    };})(r));
+    tdPed.appendChild(inPed); tr.appendChild(tdPed);
     // Vendido (auto)
     var tdV=document.createElement('td'); tdV.className='cell-calc cell-vend'; tdV.id='vend-'+r.id; tdV.textContent=r.vendido>0?r.vendido:''; tr.appendChild(tdV);
     // $ Venta (auto) — solo admin
@@ -844,7 +892,12 @@ function updateTotales(){
 // ── ENTRADAS ─────────────────────────────────────
 function addEntry(tipo){
   var arr=tipo==='gastos'?gastos:entregas;
-  arr.push({desc:'',valor:0});
+  if(tipo==='entregas'){
+    var hora=new Date().toLocaleTimeString('es-CO',{timeZone:'America/Bogota',hour:'2-digit',minute:'2-digit'});
+    arr.push({desc:'',valor:0,hora:hora});
+  } else {
+    arr.push({desc:'',valor:0});
+  }
   renderEntries(tipo); autoSave();
 }
 
@@ -865,20 +918,28 @@ function renderEntries(tipo){
   arr.forEach(function(e,i){
     var row=document.createElement('div'); row.className='entry-row';
     if(soloLectura){
-      // Mostrar solo lectura
       var lbl=document.createElement('span');
       lbl.style.cssText='flex:2;font-size:.82rem;color:var(--negro);padding:4px 0;';
-      lbl.textContent=(e.desc||'Entrega')+': '+fmt(e.valor);
+      lbl.textContent=(e.desc||'Entrega')+(e.hora?' ⏱'+e.hora:'')+': '+fmt(e.valor);
       row.appendChild(lbl);
     } else {
-      var inDesc=document.createElement('input'); inDesc.type='text'; inDesc.placeholder='Descripción'; inDesc.value=e.desc||'';
+      var inDesc=document.createElement('input'); inDesc.type='text';
+      inDesc.placeholder=tipo==='entregas'?'Responsable':'Descripción';
+      inDesc.value=e.desc||'';
       inDesc.addEventListener('input',(function(entry){return function(){entry.desc=this.value;autoSave();};})(e));
       var inVal=document.createElement('input'); inVal.type='number'; inVal.min='0'; inVal.placeholder='$0'; inVal.value=e.valor||'';
       inVal.style.textAlign='right';
       inVal.addEventListener('input',(function(entry){return function(){entry.valor=parseFloat(this.value)||0;recalc();autoSave();};})(e));
       var btnDel=document.createElement('button'); btnDel.className='btn-remove-entry'; btnDel.textContent='✕';
       btnDel.addEventListener('click',(function(t,idx){return function(){removeEntry(t,idx);};})(tipo,i));
-      row.appendChild(inDesc); row.appendChild(inVal); row.appendChild(btnDel);
+      if(tipo==='entregas'){
+        var wrap=document.createElement('div'); wrap.style.cssText='display:flex;flex-direction:column;flex:2;gap:2px;';
+        wrap.appendChild(inDesc);
+        if(e.hora){var h=document.createElement('span');h.style.cssText='font-size:.65rem;color:var(--gris4);';h.textContent='⏱ '+e.hora;wrap.appendChild(h);}
+        row.appendChild(wrap); row.appendChild(inVal); row.appendChild(btnDel);
+      } else {
+        row.appendChild(inDesc); row.appendChild(inVal); row.appendChild(btnDel);
+      }
     }
     list.appendChild(row);
   });
@@ -919,7 +980,7 @@ function guardar(){
   if(!sesion)return;
   setSyncStatus('sync','⟳ Guardando...');
   var key=sesion.fecha+'_'+sesion.punto+'_'+sesion.turno;
-  var snap=invRows.map(function(r){return {id:r.id,name:r.name,precio:r.precio,ant:r.ant,entradas:r.entradas||[],entrante:r.entrante,dev:r.dev,inv_final:r.inv_final,disponible:r.disponible,vendido:r.vendido,total_venta:r.total_venta};});
+  var snap=invRows.map(function(r){return {id:r.id,name:r.name,precio:r.precio,ant:r.ant,entradas:r.entradas||[],entrante:r.entrante,dev:r.dev,inv_final:r.inv_final,pedido:r.pedido,disponible:r.disponible,vendido:r.vendido,total_venta:r.total_venta};});
   sbUpsert('turnos_caja',{
     turno_key:key,punto:sesion.punto,turno:sesion.turno,fecha:sesion.fecha,cajero:sesion.cajero,
     snapshot:snap,
@@ -930,6 +991,7 @@ function guardar(){
     digital:(parseFloat(document.getElementById('inDatafono').value)||0)+(parseFloat(document.getElementById('inTransferencia').value)||0),
     entregado:entregas.reduce(function(s,e){return s+(e.valor||0);},0),
     nota:document.getElementById('inNota').value,
+    nota_siguiente:document.getElementById('inNotaSig')?document.getElementById('inNotaSig').value:'',
     cerrado:false,updated_at:new Date().toISOString()
   }).then(function(){setSyncStatus('ok','✓ Guardado');})
   .catch(function(e){setSyncStatus('err','✗ Error');console.error(e);});
@@ -1115,7 +1177,7 @@ function confirmarCierre(){
   document.getElementById('cierreModal').classList.remove('open');
   setSyncStatus('sync','⟳ Cerrando...');
   var key=sesion.fecha+'_'+sesion.punto+'_'+sesion.turno;
-  var snap=invRows.map(function(r){return {id:r.id,name:r.name,precio:r.precio,ant:r.ant,entradas:r.entradas||[],entrante:r.entrante,dev:r.dev,inv_final:r.inv_final,disponible:r.disponible,vendido:r.vendido,total_venta:r.total_venta};});
+  var snap=invRows.map(function(r){return {id:r.id,name:r.name,precio:r.precio,ant:r.ant,entradas:r.entradas||[],entrante:r.entrante,dev:r.dev,inv_final:r.inv_final,pedido:r.pedido,disponible:r.disponible,vendido:r.vendido,total_venta:r.total_venta};});
   sbUpsert('turnos_caja',{
     turno_key:key,punto:sesion.punto,turno:sesion.turno,fecha:sesion.fecha,cajero:sesion.cajero,
     snapshot:snap,
@@ -1126,6 +1188,7 @@ function confirmarCierre(){
     digital:(parseFloat(document.getElementById('inDatafono').value)||0)+(parseFloat(document.getElementById('inTransferencia').value)||0),
     entregado:entregas.reduce(function(s,e){return s+(e.valor||0);},0),
     nota:document.getElementById('inNota').value,
+    nota_siguiente:document.getElementById('inNotaSig')?document.getElementById('inNotaSig').value:'',
     cerrado:true,updated_at:new Date().toISOString()
   }).then(function(){
     setSyncStatus('ok','✓ Cerrado');
@@ -1156,7 +1219,9 @@ function imprimirTurno(){
     filas+='<tr><td style="text-align:left;font-weight:500">'+escH(r.name)+'</td>'
       +'<td>'+fmt(r.precio)+'</td><td>'+(r.ant||'—')+'</td><td>'+(r.entrante||'—')+'</td>'
       +'<td>'+(r.dev||'—')+'</td><td><b>'+(r.disponible||'—')+'</b></td>'
-      +'<td>'+(r.inv_final||'—')+'</td><td style="font-weight:700;color:#2d6a2d">'+(r.vendido||'—')+'</td>'
+      +'<td>'+(r.inv_final!==null&&r.inv_final!==undefined?r.inv_final:'—')+'</td>'
+      +'<td style="background:#f8f0ff;font-weight:700;color:#6a3a8a;">'+(r.pedido||'—')+'</td>'
+      +'<td style="font-weight:700;color:#2d6a2d;">'+(r.vendido||'—')+'</td>'
       +'<td style="font-weight:700">'+(r.total_venta>0?fmt(r.total_venta):'—')+'</td></tr>';
   });
   function listaEntradas(arr){
@@ -1185,7 +1250,7 @@ function imprimirTurno(){
     +'<div class="sub"><div><div class="punto">'+pN+' — '+tN+'</div><div style="font-size:7.5pt;color:#555;">'+sesion.fecha+' · '+hora+'</div></div>'
     +'<div class="meta">Cajero: <b>'+escH(sesion.cajero)+'</b></div></div></div>'
     +'<table><thead><tr><th class="left">Producto</th><th>Precio</th>'
-    +'<th>Ant.</th><th>Entr.</th><th>Dev.</th><th>Disp.</th><th>Final</th><th>Vendido</th><th>$ Venta</th>'
+    +'<th>Ant.</th><th>Entr.</th><th>Dev.</th><th>Disp.</th><th>Final</th><th style="background:#2a1a3a;color:#c8a8f0;">Pedido</th><th>Vendido</th><th>$ Venta</th>'
     +'</tr></thead><tbody>'+filas+'</tbody>'
     +'<tfoot><tr><td class="left" colspan="7">TOTALES</td>'
     +'<td style="font-weight:700;color:#2d6a2d">'+totVend+'</td>'
@@ -1279,16 +1344,82 @@ function fabAgregarProducto(){
   }).catch(function(e){setSyncStatus('err','✗ Error');alert('Error: '+e.message);});
 }
 
-function eliminarTurno(turnoKey, el){
-  if(!confirm('¿Eliminar este turno del historial? Esta acción no se puede deshacer.')) return;
+function eliminarTurno(turnoKey, cardEl){
+  if(!confirm('¿Eliminar este turno del historial?')) return;
+  // Mover a papelera (eliminado:true) en vez de borrar
   setSyncStatus('sync','⟳ Eliminando...');
   fetch(SB_URL+'/rest/v1/turnos_caja?turno_key=eq.'+encodeURIComponent(turnoKey),{
-    method:'DELETE',headers:HEADS
+    method:'PATCH',
+    headers:Object.assign({},HEADS,{'Prefer':'return=minimal'}),
+    body:JSON.stringify({eliminado:true, updated_at:new Date().toISOString()})
   }).then(function(r){
     if(!r.ok) return r.text().then(function(t){throw new Error(t);});
-    setSyncStatus('ok','✓ Eliminado');
-    if(el) el.remove();
+    setSyncStatus('ok','✓ Movido a papelera');
+    alert('✅ Turno movido a la papelera. Puedes restaurarlo desde 🗑 Papelera.');
+    if(cardEl) cardEl.remove();
   }).catch(function(e){setSyncStatus('err','✗ Error');alert('Error: '+e.message);});
+}
+
+function abrirPapelera(){
+  document.getElementById('papeModal').classList.add('open');
+  var res=document.getElementById('papeResultados');
+  res.innerHTML='<p style="color:var(--gris4);font-size:.8rem;text-align:center;padding:12px;">Buscando...</p>';
+  sbGet('turnos_caja','eliminado=eq.true&order=fecha.desc&limit=50')
+    .then(function(turnos){
+      if(!turnos.length){
+        res.innerHTML='<p style="color:var(--gris4);font-size:.8rem;text-align:center;padding:12px;">La papelera está vacía.</p>';
+        return;
+      }
+      var pN={autopista:'Vaca Autopista',boquia:'Vaca Boquia',tebaida:'Vaca Tebaida'};
+      var tN={manana:'☀ Mañana',tarde:'🌙 Tarde',completo:'⬛ Completo'};
+      res.innerHTML='';
+      turnos.forEach(function(t){
+        var card=document.createElement('div');
+        card.style.cssText='background:var(--gris1);border:1px solid var(--gris2);border-radius:8px;padding:10px;margin-bottom:8px;';
+        card.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;">'
+          +'<div>'
+          +'<div style="font-weight:700;font-size:.85rem;">'+(pN[t.punto]||t.punto)+' — '+(tN[t.turno]||t.turno)+'</div>'
+          +'<div style="font-size:.72rem;color:var(--gris4);">'+t.fecha+' · '+escH(t.cajero||'—')+'</div>'
+          +'</div>'
+          +'<div style="display:flex;gap:6px;">'
+          +'<button onclick="restaurarTurno(\''+t.turno_key+'\',this.closest(\'div[data-pape]\'))" '
+          +'style="background:#1a4a1a;color:#7dbb7d;border:none;border-radius:5px;padding:5px 10px;font-size:.75rem;font-weight:700;cursor:pointer;">↩ Restaurar</button>'
+          +'<button onclick="borrarDefinitivo(\''+t.turno_key+'\',this.closest(\'div[data-pape]\'))" '
+          +'style="background:#3a0a0a;color:#e88;border:none;border-radius:5px;padding:5px 10px;font-size:.75rem;font-weight:700;cursor:pointer;">🗑 Borrar</button>'
+          +'</div>'
+          +'</div>';
+        card.dataset.pape='1';
+        res.appendChild(card);
+      });
+    }).catch(function(e){res.innerHTML='<p style="color:var(--rojo);font-size:.8rem;">Error: '+e.message+'</p>';});
+}
+
+function restaurarTurno(turnoKey, cardEl){
+  if(!confirm('¿Restaurar este turno?')) return;
+  fetch(SB_URL+'/rest/v1/turnos_caja?turno_key=eq.'+encodeURIComponent(turnoKey),{
+    method:'PATCH',
+    headers:Object.assign({},HEADS,{'Prefer':'return=minimal'}),
+    body:JSON.stringify({eliminado:false, updated_at:new Date().toISOString()})
+  }).then(function(){
+    setSyncStatus('ok','✓ Turno restaurado');
+    if(cardEl) cardEl.remove();
+  }).catch(function(e){alert('Error: '+e.message);});
+}
+
+function borrarDefinitivo(turnoKey, cardEl){
+  if(!confirm('¿Borrar definitivamente? Esta acción NO se puede deshacer.')) return;
+  fetch(SB_URL+'/rest/v1/turnos_caja?turno_key=eq.'+encodeURIComponent(turnoKey),{
+    method:'DELETE',headers:HEADS
+  }).then(function(){
+    setSyncStatus('ok','✓ Eliminado definitivamente');
+    if(cardEl) cardEl.remove();
+  }).catch(function(e){alert('Error: '+e.message);});
+}
+
+function mostrarNotaCompañero(nota){
+  if(!nota||!nota.trim()) return;
+  document.getElementById('notaCompTexto').textContent=nota;
+  document.getElementById('notaCompModal').classList.add('open');
 }
 
 function doReorder(srcId,tgtId){
@@ -1324,7 +1455,7 @@ function buscarHistorial(){
   if(!fecha){alert('Selecciona una fecha.');return;}
   var res = document.getElementById('histResultados');
   res.innerHTML='<p style="color:var(--gris4);font-size:.8rem;">Buscando...</p>';
-  sbGet('turnos_caja','fecha=eq.'+fecha+'&cerrado=eq.true&order=punto.asc,turno.asc')
+  sbGet('turnos_caja','fecha=eq.'+fecha+'&cerrado=eq.true&eliminado=eq.false&order=punto.asc,turno.asc')
     .then(function(turnos){
       if(!turnos.length){
         res.innerHTML='<p style="color:var(--gris4);font-size:.8rem;padding:12px 0;text-align:center;">No hay turnos cerrados para esta fecha.</p>';
