@@ -599,7 +599,7 @@ function entrar(admin){
 
 function salir(){
   if(!confirm('¿Salir?'))return;
-  sesion=null; isAdmin=false; invRows=[]; gastos=[]; entregas=[]; entregaFinal=false;
+  sesion=null; isAdmin=false; invRows=[]; gastos=[]; entregas=[]; entregaFinal=false; window._turnoCerrado=false;
   clearInterval(adminTimer);
   document.getElementById('adminBadge').style.display='none';
   var f=document.getElementById('fabAddProd'); if(f) f.style.display='none';
@@ -1018,6 +1018,8 @@ function autoSave(){clearTimeout(saveTimer);saveTimer=setTimeout(guardar,1200);}
 
 function guardar(){
   if(!sesion)return;
+  // No guardar si el turno ya fue cerrado (evita reabrir desde otra pestaña)
+  if(window._turnoCerrado){setSyncStatus('ok','✓');return;}
   setSyncStatus('sync','⟳ Guardando...');
   var key=sesion.fecha+'_'+sesion.punto+'_'+sesion.turno;
   var snap=invRows.map(function(r){return {id:r.id,name:r.name,precio:r.precio,ant:r.ant,entradas:r.entradas||[],entrante:r.entrante,dev:r.dev,inv_final:r.inv_final,pedido:r.pedido,disponible:r.disponible,vendido:r.vendido,total_venta:r.total_venta};});
@@ -1215,6 +1217,13 @@ function abrirCierre(){
 }
 
 function confirmarCierre(){
+  // Re-validar antes de cerrar definitivo
+  var erroresConf=invRows.filter(function(r){
+    return r.inv_final!==null&&r.inv_final!==undefined&&r.inv_final>r.disponible;
+  });
+  if(erroresConf.length){alert('❌ Hay productos con inventario final mayor al disponible. Corrige antes de cerrar.');return;}
+  var entConf=entregas.reduce(function(s,e){return s+(e.valor||0);},0);
+  if(!entregas.length||entConf<=0){alert('❌ No hay entregas de dinero registradas. El admin debe registrar las entregas.');return;}
   document.getElementById('cierreModal').classList.remove('open');
   setSyncStatus('sync','⟳ Cerrando...');
   var key=sesion.fecha+'_'+sesion.punto+'_'+sesion.turno;
@@ -1233,6 +1242,7 @@ function confirmarCierre(){
     entrega_final:entregaFinal,
     cerrado:true,updated_at:new Date().toISOString()
   }).then(function(){
+    window._turnoCerrado=true;
     setSyncStatus('ok','✓ Cerrado');
     alert('✅ Turno cerrado correctamente.');
     salir();
@@ -1266,9 +1276,13 @@ function imprimirTurno(){
       +'<td style="font-weight:700;color:#2d6a2d;">'+(r.vendido||'—')+'</td>'
       +'<td style="font-weight:700">'+(r.total_venta>0?fmt(r.total_venta):'—')+'</td></tr>';
   });
-  function listaEntradas(arr){
+  function listaEntradas(arr, mostrarHora){
     if(!arr||!arr.length) return '<i style="color:#aaa">Ninguno</i>';
-    return arr.map(function(e){return '<div style="display:flex;justify-content:space-between;font-size:8pt;padding:2px 0;"><span>'+(e.desc||'—')+'</span><b>'+fmt(e.valor)+'</b></div>';}).join('');
+    return arr.map(function(e){
+      return '<div style="display:flex;justify-content:space-between;font-size:7pt;padding:2px 0;border-bottom:1px dotted #eee;">'
+        +'<span>'+(e.desc||'—')+(mostrarHora&&e.hora?' <span style="color:#888;font-size:6pt;">⏱'+e.hora+'</span>':'')+'</span>'
+        +'<b>'+fmt(e.valor)+'</b></div>';
+    }).join('');
   }
   var html='<!DOCTYPE html><html><head><title>Cierre</title>'
     +'<style>@page{size:letter portrait;margin:7mm 9mm;}*{box-sizing:border-box;margin:0;padding:0;}body{font-family:Arial,sans-serif;color:#111;font-size:7.5pt;}'
@@ -1290,7 +1304,7 @@ function imprimirTurno(){
     +'</style></head><body>'
     +'<div class="hdr"><div class="brand">La Vaca <span style="color:#7c4a1e">Original</span></div>'
     +'<div class="sub"><div><div class="punto">'+pN+' — '+tN+'</div><div style="font-size:7.5pt;color:#555;">'+sesion.fecha+' · '+hora+'</div></div>'
-    +'<div class="meta">Cajero: <b>'+escH(sesion.cajero)+'</b></div></div></div>'
+    +'<div class="meta">Cajero: <b>'+escH(sesion.cajero)+'</b>'+(sesion.cajeroAux?'<br>Auxiliar: <b>'+escH(sesion.cajeroAux)+'</b>':'')+'</div></div></div>'
     +'<table><thead><tr><th class="left">Producto</th><th>Precio</th>'
     +'<th>Ant.</th><th>Entr.</th><th>Dev.</th><th>Disp.</th><th>Final</th><th style="background:#2a1a3a;color:#c8a8f0;">Pedido</th><th>Vendido</th><th>$ Venta</th>'
     +'</tr></thead><tbody>'+filas+'</tbody>'
@@ -1298,10 +1312,10 @@ function imprimirTurno(){
     +'<td style="font-weight:700;color:#2d6a2d">'+totVend+'</td>'
     +'<td style="font-weight:700">'+fmt(tv)+'</td></tr></tfoot></table>'
     +'<div class="col2">'
-    +'<div class="box"><div class="sec">Gastos</div>'+listaEntradas(gastos)+'<div class="rr" style="border-top:1px solid #ccc;margin-top:4px;padding-top:3px;"><b>Total</b><b>'+fmt(gas)+'</b></div></div>'
+    +'<div class="box"><div class="sec">Gastos</div>'+listaEntradas(gastos,false)+'<div class="rr" style="border-top:1px solid #ccc;margin-top:4px;padding-top:3px;"><b>Total</b><b>'+fmt(gas)+'</b></div></div>'
     +'<div class="box"><div class="sec">Datáfono</div><div class="rr"><b>Total</b><b>'+fmt(dat)+'</b></div></div>'
     +'<div class="box"><div class="sec">Transferencias</div><div class="rr"><b>Total</b><b>'+fmt(tra)+'</b></div></div>'
-    +'<div class="box"><div class="sec">Entregas efectivo</div>'+listaEntradas(entregas)+'<div class="rr" style="border-top:1px solid #ccc;margin-top:4px;padding-top:3px;"><b>Total</b><b>'+fmt(ent)+'</b></div></div>'
+    +'<div class="box"><div class="sec">Entregas efectivo</div>'+listaEntradas(entregas,true)+'<div class="rr" style="border-top:1px solid #ccc;margin-top:4px;padding-top:3px;"><b>Total</b><b>'+fmt(ent)+'</b></div></div>'
     +'</div>'
     +'<div class="rr" style="margin-top:7px;font-size:9pt;"><span>Total ventas</span><b>'+fmt(tv)+'</b></div>'
     +'<div class="rr" style="font-size:9pt;"><span>− Gastos + Digital</span><b>'+fmt(gas+dat+tra)+'</b></div>'
@@ -1310,6 +1324,7 @@ function imprimirTurno(){
     +(nota?'<div style="margin-top:5px;font-style:italic;font-size:8pt;color:#666;">📝 '+nota+'</div>':'')
     +'<div class="firmas">'
     +'<div class="fb"><div class="fl">Firma Cajero: '+escH(sesion.cajero)+'</div></div>'
+    +(sesion.cajeroAux?'<div class="fb"><div class="fl">Firma Auxiliar: '+escH(sesion.cajeroAux)+'</div></div>':'<div class="fb"><div class="fl">Firma Encargado Producción</div></div>')
     +'<div class="fb"><div class="fl">Firma Encargado Producción</div></div>'
     +'</div></body></html>';
   var w=window.open('','_blank','width=750,height=900');
