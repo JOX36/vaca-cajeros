@@ -622,10 +622,10 @@ function cargarInventario(){
         // Turno actual
         sbGet('turnos_caja','punto=eq.'+sesion.punto+'&turno_key=eq.'+turnoKey+'&limit=1').catch(function(){return[];}),
         // Último turno cerrado del mismo punto en fechas anteriores (cualquier distancia)
-        sbGet('turnos_caja','punto=eq.'+sesion.punto+'&cerrado=eq.true&eliminado=eq.false&fecha=lt.'+sesion.fecha+'&order=fecha.desc,turno.desc&limit=1').catch(function(){return[];}),
+        sbGet('turnos_caja','punto=eq.'+sesion.punto+'&cerrado=eq.true&fecha=lt.'+sesion.fecha+'&order=fecha.desc,turno.desc&limit=1').catch(function(){return[];}),
         // Si es tarde: buscar AM del mismo día
         sesion.turno==='tarde'
-          ? sbGet('turnos_caja','punto=eq.'+sesion.punto+'&turno_key=eq.'+sesion.fecha+'_'+sesion.punto+'_manana&cerrado=eq.true&eliminado=eq.false&limit=1').catch(function(){return[];})
+          ? sbGet('turnos_caja','punto=eq.'+sesion.punto+'&turno_key=eq.'+sesion.fecha+'_'+sesion.punto+'_manana&cerrado=eq.true&limit=1').catch(function(){return[];})
           : Promise.resolve([])
       ]).then(function(res){
         var saved   = res[0].length ? res[0][0] : null;
@@ -668,6 +668,15 @@ function cargarInventario(){
             if(dEl) dEl.value=saved.datafono_val||'';
             if(tEl) tEl.value=saved.transferencia_val||'';
           },100);
+        }
+        // Si el turno ya fue cerrado, bloquearlo
+        if(saved && saved.cerrado && !isAdmin){
+          window._turnoCerrado=true;
+          setTimeout(function(){
+            alert('⚠️ Este turno ya fue cerrado. Solo puedes consultarlo, no editarlo.');
+          },800);
+        } else {
+          window._turnoCerrado=false;
         }
         buildTable(); renderAllEntries(); recalc();
         // Nota del compañero solo si es turno nuevo (no existe guardado aún)
@@ -745,8 +754,12 @@ function buildTable(){
       inAnt.value=r.ant||''; inAnt.placeholder='0';
       inAnt.style.cssText='font-family:Inter,sans-serif;font-size:.78rem;width:62px;padding:3px 5px;border:1.5px solid #4a8a4a;border-radius:4px;background:#f0fff0;text-align:center;';
       inAnt.addEventListener('change',(function(row){return function(){
-        row.ant=parseFloat(this.value)||0;
-        calcFila(row); updateFila(row); autoSave();
+        var val=this.value===''?0:parseFloat(this.value)||0;
+        row.ant=val;
+        calcFila(row); updateFila(row);
+        // Guardar inmediatamente sin delay para que no se pierda
+        clearTimeout(saveTimer); saveTimer=null;
+        guardar();
         setSyncStatus('ok','✓ Anterior actualizado');
       };})(r));
       tdA.appendChild(inAnt);
