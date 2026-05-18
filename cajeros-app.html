@@ -990,11 +990,11 @@ function recalc(){
   var ent=entregas.reduce(function(s,e){return s+(e.valor||0);},0);
   var ef=tv-gas-dat-tra;
   var dif=ent-ef;
-  document.getElementById('rTotalVentas').textContent=fmt(tv);
+  document.getElementById('rTotalVentas').textContent=isAdmin?fmt(tv):'—';
   document.getElementById('rGastos').textContent=fmt(gas);
   document.getElementById('rDatafono').textContent=fmt(dat);
   document.getElementById('rTransferencia').textContent=fmt(tra);
-  document.getElementById('rEfectivo').textContent=fmt(ef);
+  document.getElementById('rEfectivo').textContent=isAdmin?fmt(ef):'—';
   var rEnt=document.getElementById('rEntregado');
   var rDif=document.getElementById('rDiferencia');
   if(ent>0){
