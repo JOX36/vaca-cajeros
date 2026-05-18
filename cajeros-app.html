@@ -672,8 +672,15 @@ function cargarInventario(){
         // Si el turno ya fue cerrado, bloquearlo
         if(saved && saved.cerrado && !isAdmin){
           window._turnoCerrado=true;
+          // Bloquear campos de resumen
+          var inDat=document.getElementById('inDatafono'); if(inDat){inDat.readOnly=true;inDat.style.background='#f0f0f0';}
+          var inTra=document.getElementById('inTransferencia'); if(inTra){inTra.readOnly=true;inTra.style.background='#f0f0f0';}
+          var inNota=document.getElementById('inNota'); if(inNota){inNota.readOnly=true;inNota.style.background='#f0f0f0';}
+          var inNotaSig=document.getElementById('inNotaSig'); if(inNotaSig){inNotaSig.readOnly=true;inNotaSig.style.background='#f0f0f0';}
+          var btnGas=document.getElementById('btnAddGasto'); if(btnGas) btnGas.style.display='none';
+          var btnCerrar=document.getElementById('btnCerrar'); if(btnCerrar) btnCerrar.style.display='none';
           setTimeout(function(){
-            alert('⚠️ Este turno ya fue cerrado. Solo puedes consultarlo, no editarlo.');
+            alert('⚠️ Este turno ya fue cerrado. Solo puedes consultarlo.');
           },800);
         } else {
           window._turnoCerrado=false;
@@ -691,6 +698,8 @@ function cargarInventario(){
 // ── TABLA ────────────────────────────────────────
 function buildTable(){
   var tb=document.getElementById('invBody'); tb.innerHTML='';
+  // Bloquear todo si turno cerrado y no es admin
+  var soloLectura = window._turnoCerrado && !isAdmin;
   // Actualizar encabezado según rol
   var thMoney=document.getElementById('thMoney');
   var ftMoney=document.getElementById('ftDinero');
@@ -767,14 +776,28 @@ function buildTable(){
       tdA.className='cell-locked'; tdA.textContent=r.ant||'—';
     }
     tr.appendChild(tdA);
-    // Entrante — acumulable con botón +
-    tr.appendChild(mkInpAcumulable(r));
-    // Devolución — cajero puede editar
-    tr.appendChild(mkInp(r,'dev','#e09090'));
+    // Entrante — acumulable con botón + (bloqueado si turno cerrado)
+    if(soloLectura){
+      var tdEnt=document.createElement('td'); tdEnt.className='cell-locked';
+      tdEnt.textContent=r.entrante||'—'; tr.appendChild(tdEnt);
+    } else {
+      tr.appendChild(mkInpAcumulable(r));
+    }
+    // Devolución
+    if(soloLectura){
+      var tdDev=document.createElement('td'); tdDev.className='cell-locked';
+      tdDev.textContent=r.dev||'—'; tr.appendChild(tdDev);
+    } else {
+      tr.appendChild(mkInp(r,'dev','#e09090'));
+    }
     // Disponible (auto)
     var tdD=document.createElement('td'); tdD.className='cell-calc cell-disp'; tdD.id='disp-'+r.id; tdD.textContent=r.disponible||''; tr.appendChild(tdD);
-    // Inv Final — cajero puede editar
-    var tdFin=mkInp(r,'inv_final','#6a90d0');
+    // Inv Final
+    if(soloLectura){
+      var tdFinR=document.createElement('td'); tdFinR.className='cell-locked';
+      tdFinR.textContent=r.inv_final!==null&&r.inv_final!==undefined?r.inv_final:'—'; tr.appendChild(tdFinR);
+    } else {
+      var tdFin=mkInp(r,'inv_final','#6a90d0');
     // Validación visual si excede disponible
     var inpFin=tdFin.querySelector('input');
     if(inpFin){
@@ -801,17 +824,23 @@ function buildTable(){
       };})(r,tdFin));
     }
     tr.appendChild(tdFin);
+    } // fin else soloLectura inv_final
     // Pedido para siguiente turno
-    var tdPed=document.createElement('td'); tdPed.style.cssText='padding:2px 4px;';
-    var inPed=document.createElement('input'); inPed.type='number'; inPed.min='0'; inPed.placeholder='—';
-    inPed.value=(r.pedido!==null&&r.pedido!==undefined)?r.pedido:'';
-    inPed.style.cssText='font-family:Inter,sans-serif;font-size:.78rem;width:50px;padding:3px 5px;border:1.5px solid #6a3a8a;border-radius:4px;background:#f8f0ff;text-align:center;';
-    inPed.title='Pedido para el siguiente turno';
-    inPed.addEventListener('input',(function(row){return function(){
-      row.pedido=this.value===''?null:parseFloat(this.value);
-      autoSave();
-    };})(r));
-    tdPed.appendChild(inPed); tr.appendChild(tdPed);
+    if(soloLectura){
+      var tdPedR=document.createElement('td'); tdPedR.className='cell-locked';
+      tdPedR.textContent=r.pedido||'—'; tr.appendChild(tdPedR);
+    } else {
+      var tdPed=document.createElement('td'); tdPed.style.cssText='padding:2px 4px;';
+      var inPed=document.createElement('input'); inPed.type='number'; inPed.min='0'; inPed.placeholder='—';
+      inPed.value=(r.pedido!==null&&r.pedido!==undefined)?r.pedido:'';
+      inPed.style.cssText='font-family:Inter,sans-serif;font-size:.78rem;width:50px;padding:3px 5px;border:1.5px solid #6a3a8a;border-radius:4px;background:#f8f0ff;text-align:center;';
+      inPed.title='Pedido para el siguiente turno';
+      inPed.addEventListener('input',(function(row){return function(){
+        row.pedido=this.value===''?null:parseFloat(this.value);
+        autoSave();
+      };})(r));
+      tdPed.appendChild(inPed); tr.appendChild(tdPed);
+    }
     // Vendido (auto)
     var tdV=document.createElement('td'); tdV.className='cell-calc cell-vend'; tdV.id='vend-'+r.id; tdV.textContent=r.vendido>0?r.vendido:''; tr.appendChild(tdV);
     // $ Venta (auto) — solo admin
