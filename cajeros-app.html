@@ -641,11 +641,18 @@ function cargarInventario(){
         }
         invRows=productos.map(function(p){
           var sv=saved&&saved.snapshot?saved.snapshot.find(function(s){return s.id===p.id;}):null;
-          var antVal=invAnt[p.id]!==undefined?invAnt[p.id]:(sv&&sv.ant!==null&&sv.ant!==undefined?sv.ant:0);
+          // Si ya existe turno guardado: respetar el ant del snapshot (puede haber sido editado por admin)
+          // Si es turno nuevo: tomar inv_final del turno anterior
+          var antVal;
+          if(saved){
+            antVal=sv&&sv.ant!==null&&sv.ant!==undefined?sv.ant:0;
+          } else {
+            antVal=invAnt[p.id]!==undefined?invAnt[p.id]:0;
+          }
           return {id:p.id,name:p.name,precio:p.precio||0,
             ant:antVal,
             entradas:sv?(sv.entradas&&sv.entradas.length?sv.entradas:(sv.entrante?[sv.entrante]:[])):[],
-            entrante:sv?sv.entrante:null,dev:sv?sv.dev:null,inv_final:sv?sv.inv_final:null,pedido:null,
+            entrante:sv?sv.entrante:null,dev:sv?sv.dev:null,inv_final:sv?sv.inv_final:null,pedido:sv?sv.pedido:null,
             disponible:0,vendido:0,total_venta:0};
         });
         if(saved){
