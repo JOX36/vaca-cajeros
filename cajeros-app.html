@@ -223,7 +223,7 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
           <th class="th-disp col-sep">Disponible</th>
           <th class="th-base col-sep">Inv.Final</th>
           <th class="th-vend col-sep">Vendido</th>
-          <th class="th-vend">$ Venta</th>
+          <th class="th-vend" id="thMoney">$ Venta</th>
         </tr></thead>
         <tbody id="invBody"></tbody>
         <tfoot>
@@ -386,6 +386,9 @@ var SB_URL = 'https://qpacajnwrpyqhjjxyryg.supabase.co';
 var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwYWNham53cnB5cWhqanh5cnlnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY2MDc2ODAsImV4cCI6MjA5MjE4MzY4MH0.M4zobyqyQ4Xg0uqQeUpHrTAU2hpa14Te2WZ2pwkymu0';
 var HEADS = {'Content-Type':'application/json','apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY};
 var PASS_ADMIN = '150884';
+var PASS_ADMIN2 = '@lavaca2026';
+
+function esAdmin(clave){ return clave===PASS_ADMIN || clave===PASS_ADMIN2; }
 var sesion = null;
 var isAdmin = false;
 var productos = [];
@@ -418,14 +421,14 @@ function setSyncStatus(state,msg){
 document.getElementById('btnEntrar').addEventListener('click', function(){ entrar(false); });
 document.getElementById('btnAdminLogin').addEventListener('click', function(){
   var v=prompt('🔒 Clave de administrador:');
-  if(v===PASS_ADMIN) entrar(true);
+  if(esAdmin(v)) entrar(true);
   else if(v!==null) alert('Clave incorrecta.');
 });
 document.getElementById('btnSalir').addEventListener('click', salir);
 document.getElementById('btnAdminApp').addEventListener('click', function(){
   if(isAdmin){ openAdmin(); return; }
   var v=prompt('🔒 Clave de administrador:');
-  if(v===PASS_ADMIN){ isAdmin=true; showAdminUI(); openAdmin(); }
+  if(esAdmin(v)){ isAdmin=true; showAdminUI(); openAdmin(); }
   else if(v!==null) alert('Clave incorrecta.');
 });
 document.getElementById('adminX').addEventListener('click', function(){document.getElementById('adminModal').classList.remove('open');});
@@ -561,6 +564,7 @@ function cargarInventario(){
           var sv=saved&&saved.snapshot?saved.snapshot.find(function(s){return s.id===p.id;}):null;
           return {id:p.id,name:p.name,precio:p.precio||0,
             ant:sv?(sv.ant!==null&&sv.ant!==undefined?sv.ant:0):(invAnt[p.id]!==undefined?invAnt[p.id]:0),
+            entradas:sv?(sv.entradas||[]):[],
             entrante:sv?sv.entrante:null,dev:sv?sv.dev:null,inv_final:sv?sv.inv_final:null,
             disponible:0,vendido:0,total_venta:0};
         });
@@ -598,6 +602,11 @@ function getTurnosAnterioresKeys(){
 // ── TABLA ────────────────────────────────────────
 function buildTable(){
   var tb=document.getElementById('invBody'); tb.innerHTML='';
+  // Actualizar encabezado según rol
+  var thMoney=document.getElementById('thMoney');
+  var ftMoney=document.getElementById('ftDinero');
+  if(thMoney) thMoney.style.display=isAdmin?'':'none';
+  if(ftMoney) ftMoney.style.display=isAdmin?'':'none';
   invRows.forEach(function(r,idx){
     calcFila(r);
     var tr=document.createElement('tr');
@@ -665,8 +674,8 @@ function buildTable(){
       tdA.className='cell-locked'; tdA.textContent=r.ant||'—';
     }
     tr.appendChild(tdA);
-    // Entrante — cajero puede editar
-    tr.appendChild(mkInp(r,'entrante',''));
+    // Entrante — acumulable con botón +
+    tr.appendChild(mkInpAcumulable(r));
     // Devolución — cajero puede editar
     tr.appendChild(mkInp(r,'dev','#e09090'));
     // Disponible (auto)
@@ -675,8 +684,10 @@ function buildTable(){
     tr.appendChild(mkInp(r,'inv_final','#6a90d0'));
     // Vendido (auto)
     var tdV=document.createElement('td'); tdV.className='cell-calc cell-vend'; tdV.id='vend-'+r.id; tdV.textContent=r.vendido>0?r.vendido:''; tr.appendChild(tdV);
-    // $ Venta (auto)
-    var tdM=document.createElement('td'); tdM.className='cell-calc cell-vend'; tdM.id='money-'+r.id; tdM.textContent=r.total_venta>0?fmt(r.total_venta):''; tr.appendChild(tdM);
+    // $ Venta (auto) — solo admin
+    if(isAdmin){
+      var tdM=document.createElement('td'); tdM.className='cell-calc cell-vend'; tdM.id='money-'+r.id; tdM.textContent=r.total_venta>0?fmt(r.total_venta):''; tr.appendChild(tdM);
+    }
     // Botón eliminar producto (solo admin)
     if(isAdmin){
       var tdDel=document.createElement('td'); tdDel.style.cssText='padding:3px;';
@@ -699,6 +710,60 @@ function buildTable(){
   updateTotales();
 }
 
+function mkInpAcumulable(r){
+  var td=document.createElement('td');
+  td.style.cssText='padding:2px 4px;min-width:80px;vertical-align:middle;';
+  renderAcumulable(td, r);
+  return td;
+}
+
+function renderAcumulable(td, r){
+  td.innerHTML='';
+  if(!r.entradas) r.entradas=[];
+  var wrap=document.createElement('div');
+  wrap.style.cssText='display:flex;align-items:center;gap:3px;flex-wrap:nowrap;';
+
+  // Mostrar desglose si hay múltiples entradas
+  if(r.entradas.length>1){
+    var lbl=document.createElement('span');
+    lbl.style.cssText='font-size:.72rem;color:#555;white-space:nowrap;';
+    lbl.textContent=r.entradas.join('+')+'='+r.entradas.reduce(function(s,v){return s+v;},0);
+    wrap.appendChild(lbl);
+  } else {
+    // Input editable del último (o único) valor
+    var inp=document.createElement('input');
+    inp.type='number'; inp.min='0'; inp.placeholder='0';
+    inp.value=r.entradas.length?r.entradas[0]:'';
+    inp.style.cssText='font-family:Inter,sans-serif;font-size:.78rem;width:54px;padding:3px 5px;border:1.5px solid var(--gris2);border-radius:4px;background:var(--gris1);text-align:center;';
+    inp.addEventListener('change',(function(row,t){return function(){
+      var v=parseFloat(this.value)||0;
+      if(v>0){row.entradas=[v];}else{row.entradas=[];}
+      row.entrante=row.entradas.reduce(function(s,x){return s+x;},0)||null;
+      calcFila(row); updateFila(row); autoSave();
+      renderAcumulable(t,row);
+    };})(r,td));
+    wrap.appendChild(inp);
+  }
+
+  // Botón + para agregar nueva entrada
+  var btnP=document.createElement('button');
+  btnP.textContent='＋';
+  btnP.title='Agregar más entrante';
+  btnP.style.cssText='background:var(--madera);color:white;border:none;border-radius:4px;font-size:.75rem;font-weight:700;padding:2px 6px;cursor:pointer;flex-shrink:0;';
+  btnP.addEventListener('click',(function(row,t){return function(){
+    var v=parseFloat(prompt('¿Cuántos entran ahora?')||'0')||0;
+    if(v<=0) return;
+    if(!row.entradas) row.entradas=[];
+    row.entradas.push(v);
+    row.entrante=row.entradas.reduce(function(s,x){return s+x;},0);
+    calcFila(row); updateFila(row); autoSave();
+    renderAcumulable(t,row);
+  };})(r,td));
+  wrap.appendChild(btnP);
+
+  td.appendChild(wrap);
+}
+
 function mkInp(r,field,borderColor){
   var td=document.createElement('td');
   var inp=document.createElement('input'); inp.type='number'; inp.min='0'; inp.placeholder='';
@@ -712,6 +777,10 @@ function mkInp(r,field,borderColor){
 }
 
 function calcFila(r){
+  // Calcular entrante desde array acumulado
+  if(r.entradas&&r.entradas.length){
+    r.entrante=r.entradas.reduce(function(s,v){return s+v;},0);
+  }
   r.disponible=(r.ant||0)+(r.entrante||0)-(r.dev||0);
   r.vendido=(r.inv_final!==null&&r.inv_final!==undefined)?Math.max(0,r.disponible-(r.inv_final||0)):0;
   r.total_venta=r.vendido*(r.precio||0);
@@ -809,7 +878,7 @@ function guardar(){
   if(!sesion)return;
   setSyncStatus('sync','⟳ Guardando...');
   var key=sesion.fecha+'_'+sesion.punto+'_'+sesion.turno;
-  var snap=invRows.map(function(r){return {id:r.id,name:r.name,precio:r.precio,ant:r.ant,entrante:r.entrante,dev:r.dev,inv_final:r.inv_final,disponible:r.disponible,vendido:r.vendido,total_venta:r.total_venta};});
+  var snap=invRows.map(function(r){return {id:r.id,name:r.name,precio:r.precio,ant:r.ant,entradas:r.entradas||[],entrante:r.entrante,dev:r.dev,inv_final:r.inv_final,disponible:r.disponible,vendido:r.vendido,total_venta:r.total_venta};});
   sbUpsert('turnos_caja',{
     turno_key:key,punto:sesion.punto,turno:sesion.turno,fecha:sesion.fecha,cajero:sesion.cajero,
     snapshot:snap,
@@ -829,7 +898,7 @@ function guardar(){
 function openAdmin(){
   if(!isAdmin){
     var v=prompt('🔒 Clave de administrador:');
-    if(v!==PASS_ADMIN){if(v!==null)alert('Clave incorrecta.');return;}
+    if(!esAdmin(v)){if(v!==null)alert('Clave incorrecta.');return;}
     isAdmin=true; showAdminUI();
   }
   setSyncStatus('sync','⟳ Cargando...');
@@ -994,7 +1063,7 @@ function confirmarCierre(){
   document.getElementById('cierreModal').classList.remove('open');
   setSyncStatus('sync','⟳ Cerrando...');
   var key=sesion.fecha+'_'+sesion.punto+'_'+sesion.turno;
-  var snap=invRows.map(function(r){return {id:r.id,name:r.name,precio:r.precio,ant:r.ant,entrante:r.entrante,dev:r.dev,inv_final:r.inv_final,disponible:r.disponible,vendido:r.vendido,total_venta:r.total_venta};});
+  var snap=invRows.map(function(r){return {id:r.id,name:r.name,precio:r.precio,ant:r.ant,entradas:r.entradas||[],entrante:r.entrante,dev:r.dev,inv_final:r.inv_final,disponible:r.disponible,vendido:r.vendido,total_venta:r.total_venta};});
   sbUpsert('turnos_caja',{
     turno_key:key,punto:sesion.punto,turno:sesion.turno,fecha:sesion.fecha,cajero:sesion.cajero,
     snapshot:snap,
