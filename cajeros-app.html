@@ -681,7 +681,33 @@ function buildTable(){
     // Disponible (auto)
     var tdD=document.createElement('td'); tdD.className='cell-calc cell-disp'; tdD.id='disp-'+r.id; tdD.textContent=r.disponible||''; tr.appendChild(tdD);
     // Inv Final — cajero puede editar
-    tr.appendChild(mkInp(r,'inv_final','#6a90d0'));
+    var tdFin=mkInp(r,'inv_final','#6a90d0');
+    // Agregar validación visual
+    var inpFin=tdFin.querySelector('input');
+    if(inpFin){
+      inpFin.addEventListener('input',(function(row,td){return function(){
+        var val=parseFloat(this.value);
+        if(!isNaN(val)&&val>row.disponible){
+          td.style.cssText='padding:5px 3px;';
+          this.style.borderColor='#b02020';
+          this.style.background='#fff0f0';
+          var warn=td.querySelector('.warn-exc');
+          if(!warn){
+            warn=document.createElement('div');
+            warn.className='warn-exc';
+            warn.style.cssText='font-size:.6rem;color:#b02020;font-weight:700;white-space:nowrap;';
+            td.appendChild(warn);
+          }
+          warn.textContent='⚠ +'+(val-row.disponible)+' de más';
+        } else {
+          this.style.borderColor='#6a90d0';
+          this.style.background='';
+          var warn=td.querySelector('.warn-exc');
+          if(warn) warn.remove();
+        }
+      };})(r,tdFin));
+    }
+    tr.appendChild(tdFin);
     // Vendido (auto)
     var tdV=document.createElement('td'); tdV.className='cell-calc cell-vend'; tdV.id='vend-'+r.id; tdV.textContent=r.vendido>0?r.vendido:''; tr.appendChild(tdV);
     // $ Venta (auto) — solo admin
@@ -1027,6 +1053,17 @@ function saveAdmin(){
 
 // ── CIERRE ───────────────────────────────────────
 function abrirCierre(){
+  // Validar Inv.Final no excede disponible
+  var errores=invRows.filter(function(r){
+    return r.inv_final!==null&&r.inv_final!==undefined&&r.inv_final>r.disponible;
+  });
+  if(errores.length){
+    var lista=errores.map(function(r){
+      return '• '+r.name+': tiene '+r.disponible+' disponible pero puso '+r.inv_final+' (+'+(r.inv_final-r.disponible)+' de más)';
+    }).join('\n');
+    alert('❌ No se puede cerrar el turno.\n\nLos siguientes productos tienen inventario final mayor al disponible:\n\n'+lista+'\n\nRevisa y corrige antes de cerrar.');
+    return;
+  }
   // Validar que haya entregas registradas
   var ent=entregas.reduce(function(s,e){return s+(e.valor||0);},0);
   if(!entregas.length || ent<=0){
