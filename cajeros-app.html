@@ -1732,117 +1732,174 @@ function buscarHistorial(){
     }).catch(function(e){res.innerHTML='<p style="color:var(--rojo);font-size:.8rem;">Error: '+e.message+'</p>';});
 }
 
+function calcEditTotales(){
+  var snap=turnoEditando.snapshot||[];
+  // Recalcular cada producto
+  snap.forEach(function(r,i){
+    var disp=(r.ant||0)+(r.entrante||0)-(r.dev||0);
+    r.disponible=disp;
+    r.vendido=r.inv_final!==null&&r.inv_final!==undefined?Math.max(0,disp-(r.inv_final||0)):0;
+    r.total_venta=r.vendido*(r.precio||0);
+    // Actualizar celdas en tiempo real
+    var el=document.getElementById('eVend-'+i); if(el) el.textContent=r.vendido||'—';
+    var elM=document.getElementById('eMoney-'+i); if(elM) elM.textContent=r.total_venta>0?fmt(r.total_venta):'—';
+  });
+  // Recalcular totales dinero
+  var tv=snap.reduce(function(s,r){return s+(r.total_venta||0);},0);
+  var gas=(turnoEditando.gastos_list||[]).reduce(function(s,e){return s+(e.valor||0);},0);
+  var dat=parseFloat(document.getElementById('editDatafono')?document.getElementById('editDatafono').value:0)||0;
+  var tra=parseFloat(document.getElementById('editTransferencia')?document.getElementById('editTransferencia').value:0)||0;
+  var ent=(turnoEditando.entregas_list||[]).reduce(function(s,e){return s+(e.valor||0);},0);
+  var ef=tv-gas-dat-tra;
+  var dif=ent-ef;
+  var difTxt=dif===0?'✔ Cuadra':dif<0?'Falta '+fmt(Math.abs(dif)):'Sobran '+fmt(dif);
+  var difCol=dif===0?'#2d6a2d':dif<0?'#b02020':'#7a4a00';
+  var panel=document.getElementById('editResumen');
+  if(panel){
+    panel.innerHTML=
+      '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:.8rem;"><span>Total ventas</span><b>'+fmt(tv)+'</b></div>'
+      +'<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:.8rem;"><span>− Gastos</span><b>'+fmt(gas)+'</b></div>'
+      +'<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:.8rem;"><span>− Datáfono</span><b>'+fmt(dat)+'</b></div>'
+      +'<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:.8rem;"><span>− Transferencia</span><b>'+fmt(tra)+'</b></div>'
+      +'<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:.88rem;border-top:1px solid var(--gris2);margin-top:4px;"><span><b>Efectivo a entregar</b></span><b style="color:var(--madera)">'+fmt(ef)+'</b></div>'
+      +'<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:.8rem;"><span>Total entregado</span><b>'+fmt(ent)+'</b></div>'
+      +'<div style="display:flex;justify-content:space-between;padding:6px 8px;border-radius:5px;background:'+(dif===0?'#f0fff0':dif<0?'#fff0f0':'#fff8e0')+';">'
+      +'<b>Diferencia</b><b style="color:'+difCol+';">'+difTxt+'</b></div>';
+  }
+}
+
 function abrirEditarTurno(t){
-  turnoEditando = JSON.parse(JSON.stringify(t)); // copia profunda
+  turnoEditando = JSON.parse(JSON.stringify(t));
   var pN={autopista:'Vaca Autopista',boquia:'Vaca Boquia',tebaida:'Vaca Tebaida'};
   var tN={manana:'☀ Mañana',tarde:'🌙 Tarde',completo:'⬛ Completo'};
   document.getElementById('editTurnoTitle').textContent='✏ Editar: '+(pN[t.punto]||t.punto)+' — '+(tN[t.turno]||t.turno);
-  document.getElementById('editTurnoSub').textContent=t.fecha+' · Cajero: '+(t.cajero||'—');
+  document.getElementById('editTurnoSub').textContent=t.fecha+' · Cajero: '+(t.cajero||'—')+(t.cajero_aux?' & '+t.cajero_aux:'');
   var body=document.getElementById('editTurnoBody');
   body.innerHTML='';
+  var snap=turnoEditando.snapshot||[];
 
-  // Tabla inventario
+  // ── Tabla inventario ──
   var secInv=document.createElement('div');
   secInv.innerHTML='<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--gris4);margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--gris2);">Inventario</div>';
-  var snap=turnoEditando.snapshot||[];
   var tbl=document.createElement('table');
-  tbl.style.cssText='width:100%;border-collapse:collapse;font-size:.78rem;margin-bottom:12px;';
+  tbl.style.cssText='width:100%;border-collapse:collapse;font-size:.75rem;margin-bottom:10px;';
   tbl.innerHTML='<thead><tr style="background:var(--negro);color:white;">'
-    +'<th style="text-align:left;padding:5px 7px;">Producto</th>'
-    +'<th style="padding:5px 7px;">Ant</th><th style="padding:5px 7px;">Entr</th>'
-    +'<th style="padding:5px 7px;">Dev</th><th style="padding:5px 7px;">Final</th>'
-    +'<th style="padding:5px 7px;color:#7dbb7d;">Vendido</th>'
+    +'<th style="text-align:left;padding:4px 6px;">Producto</th>'
+    +'<th style="padding:4px;">Precio</th>'
+    +'<th style="padding:4px;">Ant</th><th style="padding:4px;">Entr</th>'
+    +'<th style="padding:4px;">Dev</th><th style="padding:4px;">Final</th>'
+    +'<th style="padding:4px;color:#7dbb7d;">Vendido</th>'
+    +'<th style="padding:4px;color:#7dbb7d;">$ Venta</th>'
     +'</tr></thead>';
   var tbody=document.createElement('tbody');
+
   snap.forEach(function(r,i){
+    var disp=(r.ant||0)+(r.entrante||0)-(r.dev||0);
+    r.disponible=disp;
+    r.vendido=r.inv_final!==null&&r.inv_final!==undefined?Math.max(0,disp-(r.inv_final||0)):0;
+    r.total_venta=r.vendido*(r.precio||0);
     var tr=document.createElement('tr');
     tr.style.borderBottom='1px solid var(--gris2)';
-    var fields=['ant','entrante','dev','inv_final'];
-    var html='<td style="padding:4px 7px;font-weight:500;">'+escH(r.name)+'</td>';
-    fields.forEach(function(f){
-      html+='<td style="padding:3px;"><input type="number" value="'+(r[f]!==null&&r[f]!==undefined?r[f]:'')+'" '
-        +'style="width:54px;padding:3px 4px;border:1.5px solid var(--gris2);border-radius:4px;font-size:.75rem;text-align:center;background:var(--gris1);" '
-        +'data-idx="'+i+'" data-field="'+f+'"></td>';
-    });
-    // Vendido calculado
-    var disp=(r.ant||0)+(r.entrante||0)-(r.dev||0);
-    var vend=r.inv_final!==null&&r.inv_final!==undefined?Math.max(0,disp-(r.inv_final||0)):0;
-    html+='<td style="padding:4px 7px;font-weight:700;color:var(--verde);">'+vend+'</td>';
-    tr.innerHTML=html;
+    var inpStyle='width:52px;padding:2px 4px;border:1.5px solid var(--gris2);border-radius:4px;font-size:.74rem;text-align:center;background:var(--gris1);font-family:Inter,sans-serif;';
+    tr.innerHTML='<td style="padding:4px 6px;font-weight:500;">'+escH(r.name)+'</td>'
+      +'<td style="padding:3px;"><input type="number" value="'+(r.precio||0)+'" style="'+inpStyle+'width:60px;background:#fff8f0;border-color:var(--madera);" data-idx="'+i+'" data-field="precio"></td>'
+      +'<td style="padding:3px;"><input type="number" value="'+(r.ant!==null&&r.ant!==undefined?r.ant:'')+'" style="'+inpStyle+'background:#f0fff0;border-color:#4a8a4a;" data-idx="'+i+'" data-field="ant"></td>'
+      +'<td style="padding:3px;"><input type="number" value="'+(r.entrante!==null&&r.entrante!==undefined?r.entrante:'')+'" style="'+inpStyle+'" data-idx="'+i+'" data-field="entrante"></td>'
+      +'<td style="padding:3px;"><input type="number" value="'+(r.dev!==null&&r.dev!==undefined?r.dev:'')+'" style="'+inpStyle+'border-color:#e09090;" data-idx="'+i+'" data-field="dev"></td>'
+      +'<td style="padding:3px;"><input type="number" value="'+(r.inv_final!==null&&r.inv_final!==undefined?r.inv_final:'')+'" style="'+inpStyle+'border-color:#6a90d0;" data-idx="'+i+'" data-field="inv_final"></td>'
+      +'<td style="padding:4px 6px;font-weight:700;color:var(--verde);" id="eVend-'+i+'">'+( r.vendido||'—')+'</td>'
+      +'<td style="padding:4px 6px;font-weight:700;color:var(--verde);" id="eMoney-'+i+'">'+(r.total_venta>0?fmt(r.total_venta):'—')+'</td>';
     tbody.appendChild(tr);
   });
+
   tbl.appendChild(tbody);
-  secInv.appendChild(tbl);
-  // Escuchar cambios en inputs de inventario
+  // Escuchar cambios y recalcular en tiempo real
   tbl.addEventListener('input',function(e){
-    var inp=e.target;
-    if(inp.tagName!=='INPUT')return;
+    var inp=e.target; if(inp.tagName!=='INPUT') return;
     var idx=parseInt(inp.dataset.idx);
     var field=inp.dataset.field;
-    turnoEditando.snapshot[idx][field]=inp.value===''?null:parseFloat(inp.value);
-    // Recalcular vendido
-    var r=turnoEditando.snapshot[idx];
-    var disp=(r.ant||0)+(r.entrante||0)-(r.dev||0);
-    var vend=r.inv_final!==null&&r.inv_final!==undefined?Math.max(0,disp-(r.inv_final||0)):0;
-    // Actualizar celda vendido
-    var row=tbody.querySelectorAll('tr')[idx];
-    if(row) row.lastElementChild.textContent=vend;
+    turnoEditando.snapshot[idx][field]=inp.value===''?null:parseFloat(inp.value)||0;
+    calcEditTotales();
   });
+  secInv.appendChild(tbl);
   body.appendChild(secInv);
 
-  // Gastos
-  var secGas=document.createElement('div');
-  secGas.style.marginBottom='10px';
+  // ── Gastos ──
+  var secGas=document.createElement('div'); secGas.style.marginBottom='10px';
   secGas.innerHTML='<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--gris4);margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--gris2);">Gastos</div>';
-  var gasLista=document.createElement('div'); gasLista.id='editGastosLista';
-  renderEditEntradas(gasLista, turnoEditando.gastos_list||[], 'gastos_list');
+  var gasLista=document.createElement('div');
+  var renderG=function(){renderEditEntradas(gasLista,turnoEditando.gastos_list=turnoEditando.gastos_list||[],'gastos_list',calcEditTotales);};
+  renderG();
   var btnAddG=document.createElement('button'); btnAddG.className='btn-add-entry'; btnAddG.textContent='＋ Agregar gasto';
-  btnAddG.addEventListener('click',function(){turnoEditando.gastos_list=turnoEditando.gastos_list||[];turnoEditando.gastos_list.push({desc:'',valor:0});renderEditEntradas(gasLista,turnoEditando.gastos_list,'gastos_list');});
+  btnAddG.addEventListener('click',function(){turnoEditando.gastos_list.push({desc:'',valor:0});renderG();calcEditTotales();});
   secGas.appendChild(gasLista); secGas.appendChild(btnAddG);
   body.appendChild(secGas);
 
-  // Entregas
-  var secEnt=document.createElement('div');
-  secEnt.style.marginBottom='10px';
-  secEnt.innerHTML='<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--gris4);margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--gris2);">Entregas de efectivo</div>';
-  var entLista=document.createElement('div'); entLista.id='editEntregasLista';
-  renderEditEntradas(entLista, turnoEditando.entregas_list||[], 'entregas_list');
-  var btnAddE=document.createElement('button'); btnAddE.className='btn-add-entry'; btnAddE.textContent='＋ Agregar entrega';
-  btnAddE.addEventListener('click',function(){turnoEditando.entregas_list=turnoEditando.entregas_list||[];turnoEditando.entregas_list.push({desc:'',valor:0});renderEditEntradas(entLista,turnoEditando.entregas_list,'entregas_list');});
-  secEnt.appendChild(entLista); secEnt.appendChild(btnAddE);
-  body.appendChild(secEnt);
-
-  // Datáfono / Transferencia / Nota
-  var secExtra=document.createElement('div');
-  secExtra.innerHTML='<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--gris4);margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--gris2);">Otros</div>'
-    +'<div style="display:flex;gap:8px;margin-bottom:8px;">'
+  // ── Datáfono / Transferencia ──
+  var secDig=document.createElement('div'); secDig.style.marginBottom='10px';
+  secDig.innerHTML='<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--gris4);margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--gris2);">Digital</div>'
+    +'<div style="display:flex;gap:8px;">'
     +'<div style="flex:1;"><label style="font-size:.7rem;font-weight:600;display:block;margin-bottom:3px;">Datáfono</label>'
     +'<input type="number" id="editDatafono" value="'+(t.datafono_val||0)+'" style="width:100%;padding:6px 8px;border:1.5px solid var(--gris2);border-radius:5px;font-family:Inter,sans-serif;font-size:.83rem;background:var(--gris1);"></div>'
     +'<div style="flex:1;"><label style="font-size:.7rem;font-weight:600;display:block;margin-bottom:3px;">Transferencia</label>'
     +'<input type="number" id="editTransferencia" value="'+(t.transferencia_val||0)+'" style="width:100%;padding:6px 8px;border:1.5px solid var(--gris2);border-radius:5px;font-family:Inter,sans-serif;font-size:.83rem;background:var(--gris1);"></div>'
-    +'</div>'
-    +'<div><label style="font-size:.7rem;font-weight:600;display:block;margin-bottom:3px;">Observaciones</label>'
-    +'<input type="text" id="editNota" value="'+escH(t.nota||'')+'" style="width:100%;padding:6px 8px;border:1.5px solid var(--gris2);border-radius:5px;font-family:Inter,sans-serif;font-size:.83rem;background:var(--gris1);"></div>';
-  body.appendChild(secExtra);
+    +'</div>';
+  body.appendChild(secDig);
+  secDig.addEventListener('input',calcEditTotales);
+
+  // ── Entregas ──
+  var secEnt=document.createElement('div'); secEnt.style.marginBottom='10px';
+  secEnt.innerHTML='<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--gris4);margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--gris2);">Entregas de efectivo</div>';
+  var entLista=document.createElement('div');
+  var renderE=function(){renderEditEntradas(entLista,turnoEditando.entregas_list=turnoEditando.entregas_list||[],'entregas_list',calcEditTotales);};
+  renderE();
+  var btnAddE=document.createElement('button'); btnAddE.className='btn-add-entry'; btnAddE.textContent='＋ Agregar entrega';
+  btnAddE.addEventListener('click',function(){
+    var hora=new Date().toLocaleTimeString('es-CO',{timeZone:'America/Bogota',hour:'2-digit',minute:'2-digit'});
+    turnoEditando.entregas_list.push({desc:'',valor:0,hora:hora});
+    renderE(); calcEditTotales();
+  });
+  secEnt.appendChild(entLista); secEnt.appendChild(btnAddE);
+  body.appendChild(secEnt);
+
+  // ── Panel resumen en tiempo real ──
+  var secRes=document.createElement('div');
+  secRes.innerHTML='<div style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--gris4);margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--gris2);">Resumen recalculado</div>'
+    +'<div id="editResumen" style="background:var(--gris1);border-radius:6px;padding:10px 12px;"></div>';
+  body.appendChild(secRes);
+
+  // ── Nota ──
+  var secNota=document.createElement('div'); secNota.style.marginTop='10px';
+  secNota.innerHTML='<label style="font-size:.7rem;font-weight:600;display:block;margin-bottom:3px;">Observaciones</label>'
+    +'<input type="text" id="editNota" value="'+escH(t.nota||'')+'" style="width:100%;padding:6px 8px;border:1.5px solid var(--gris2);border-radius:5px;font-family:Inter,sans-serif;font-size:.83rem;background:var(--gris1);">';
+  body.appendChild(secNota);
 
   document.getElementById('historialModal').classList.remove('open');
   document.getElementById('editTurnoModal').classList.add('open');
-
   document.getElementById('btnGuardarEdicion').onclick=guardarEdicionTurno;
+
+  // Calcular resumen inicial
+  setTimeout(calcEditTotales, 100);
 }
 
-function renderEditEntradas(container, arr, field){
+function renderEditEntradas(container, arr, field, onChange){
   container.innerHTML='';
   arr.forEach(function(e,i){
     var row=document.createElement('div'); row.className='entry-row';
-    var inDesc=document.createElement('input'); inDesc.type='text'; inDesc.placeholder='Descripción'; inDesc.value=e.desc||'';
+    var inDesc=document.createElement('input'); inDesc.type='text';
+    inDesc.placeholder=field==='entregas_list'?'Responsable':'Descripción';
+    inDesc.value=e.desc||'';
     inDesc.addEventListener('input',(function(entry){return function(){entry.desc=this.value;};})(e));
     var inVal=document.createElement('input'); inVal.type='number'; inVal.min='0'; inVal.placeholder='$0'; inVal.value=e.valor||'';
     inVal.style.textAlign='right';
-    inVal.addEventListener('input',(function(entry){return function(){entry.valor=parseFloat(this.value)||0;};})(e));
+    inVal.addEventListener('input',(function(entry){return function(){entry.valor=parseFloat(this.value)||0;if(onChange)onChange();};})(e));
     var btnDel=document.createElement('button'); btnDel.className='btn-remove-entry'; btnDel.textContent='✕';
-    btnDel.addEventListener('click',(function(a,idx,c,f){return function(){a.splice(idx,1);renderEditEntradas(c,a,f);};})(arr,i,container,field));
+    btnDel.addEventListener('click',(function(a,idx,c,f,cb){return function(){a.splice(idx,1);renderEditEntradas(c,a,f,cb);if(cb)cb();};})(arr,i,container,field,onChange));
     row.appendChild(inDesc); row.appendChild(inVal); row.appendChild(btnDel);
+    if(field==='entregas_list'&&e.hora){
+      var h=document.createElement('span');h.style.cssText='font-size:.65rem;color:var(--gris4);margin-left:4px;';h.textContent='⏱'+e.hora;
+      row.appendChild(h);
+    }
     container.appendChild(row);
   });
 }
@@ -1850,8 +1907,8 @@ function renderEditEntradas(container, arr, field){
 function guardarEdicionTurno(){
   if(!turnoEditando) return;
   setSyncStatus('sync','⟳ Guardando...');
-  // Recalcular totales
   var snap=turnoEditando.snapshot||[];
+  // Recalcular todo
   snap.forEach(function(r){
     var disp=(r.ant||0)+(r.entrante||0)-(r.dev||0);
     r.disponible=disp;
@@ -1864,16 +1921,19 @@ function guardarEdicionTurno(){
   var tv=snap.reduce(function(s,r){return s+(r.total_venta||0);},0);
   var gas=(turnoEditando.gastos_list||[]).reduce(function(s,e){return s+(e.valor||0);},0);
   var ent=(turnoEditando.entregas_list||[]).reduce(function(s,e){return s+(e.valor||0);},0);
+  var ef=tv-gas-dat-tra;
   sbUpsert('turnos_caja',{
     turno_key:turnoEditando.turno_key,
-    punto:turnoEditando.punto, turno:turnoEditando.turno,
-    fecha:turnoEditando.fecha, cajero:turnoEditando.cajero,
+    punto:turnoEditando.punto,turno:turnoEditando.turno,
+    fecha:turnoEditando.fecha,cajero:turnoEditando.cajero,
+    cajero_aux:turnoEditando.cajero_aux||'',
     snapshot:snap,
     gastos_list:turnoEditando.gastos_list||[],
     entregas_list:turnoEditando.entregas_list||[],
-    datafono_val:dat, transferencia_val:tra,
-    gastos:gas, digital:dat+tra, entregado:ent,
-    nota:nota, cerrado:true,
+    datafono_val:dat,transferencia_val:tra,
+    gastos:gas,digital:dat+tra,entregado:ent,
+    nota:nota,cerrado:true,
+    eliminado:turnoEditando.eliminado||false,
     updated_at:new Date().toISOString()
   }).then(function(){
     setSyncStatus('ok','✓ Turno actualizado');
