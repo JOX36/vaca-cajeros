@@ -102,7 +102,7 @@ td input[readonly]{background:#f0f0f0;color:#888;cursor:not-allowed;border-color
 .res-divider{border:none;border-top:1px solid var(--gris2);margin:2px 0;}
 .val-ok{color:var(--verde);font-weight:700;}
 .val-falta{color:var(--rojo);font-weight:700;}
-.val-sobra{color:#7a4a00;font-weight:700;}
+.val-sobra{color:#e65c00;font-weight:700;}
 .nota-field{margin-top:12px;}
 .nota-field label{font-size:.72rem;font-weight:600;display:block;margin-bottom:4px;}
 .nota-field input{width:100%;padding:8px 10px;border:1.5px solid var(--gris2);border-radius:5px;font-family:'Inter',sans-serif;font-size:.84rem;background:var(--gris1);}
@@ -186,10 +186,8 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
       <label>Nombre del Cajero</label>
       <input type="text" id="selCajero" placeholder="Tu nombre completo">
     </div>
-    <div class="field">
-      <label>Cajero Auxiliar <span style="font-size:.7rem;color:#aaa;">(opcional)</span></label>
-      <input type="text" id="selCajeroAux" placeholder="Nombre del auxiliar (si aplica)">
-    </div>
+    <div id="cajerosList"></div>
+    <button type="button" onclick="agregarCajeroExtra()" style="width:100%;padding:7px;background:transparent;border:1.5px dashed var(--gris3);border-radius:7px;color:var(--gris4);font-family:'Inter',sans-serif;font-size:.78rem;cursor:pointer;margin-bottom:10px;">＋ Agregar cajero al turno</button>
     <button class="btn-login" id="btnEntrar">Entrar a mi turno →</button>
     <div class="admin-link"><button id="btnAdminLogin">⚙ Entrar como Administrador</button></div>
   </div>
@@ -516,7 +514,23 @@ document.getElementById('btnAddGasto').addEventListener('click', function(){addE
 document.getElementById('btnAddEntrega').addEventListener('click', function(){addEntry('entregas');});
 // btnEntregaFinal eliminado — ahora se maneja con checkbox por entrega
 
-// ── ADMIN UI ─────────────────────────────────────
+// ── CAJEROS EXTRAS EN LOGIN ──────────────────────
+var cajerosExtras=[];
+function agregarCajeroExtra(){
+  var idx=cajerosExtras.length;
+  cajerosExtras.push('');
+  var list=document.getElementById('cajerosList');
+  var div=document.createElement('div'); div.className='field'; div.style.display='flex'; div.style.gap='6px';
+  var inp=document.createElement('input'); inp.type='text';
+  inp.placeholder='Nombre cajero '+(idx+2);
+  inp.style.cssText='flex:1;padding:10px 13px;border:1.5px solid var(--gris2);border-radius:7px;font-family:Inter,sans-serif;font-size:.88rem;background:var(--gris1);';
+  inp.addEventListener('input',(function(i){return function(){cajerosExtras[i]=this.value.trim();};})(idx));
+  var btnX=document.createElement('button'); btnX.type='button'; btnX.textContent='✕';
+  btnX.style.cssText='padding:0 12px;border:1.5px solid var(--gris2);border-radius:7px;background:transparent;color:#aaa;cursor:pointer;font-size:.9rem;';
+  btnX.addEventListener('click',(function(i,d){return function(){cajerosExtras.splice(i,1);d.remove();};})(idx,div));
+  div.appendChild(inp); div.appendChild(btnX);
+  list.appendChild(div);
+}
 var adminTimer=null;
 var adminTimerSecs=0;
 
@@ -541,7 +555,11 @@ function showAdminUI(){
   buildTable();
   // Timer 5 minutos
   clearInterval(adminTimer);
-  adminTimerSecs=300;
+  // Preguntar duración de sesión
+  var mins=prompt('⏱ ¿Cuántos minutos necesitas?\n\n5 — Corto\n10 — Normal\n15 — Extendido\n\nEscribe 5, 10 o 15:','10');
+  var minutos=parseInt(mins)||10;
+  if(minutos!==5&&minutos!==10&&minutos!==15) minutos=10;
+  adminTimerSecs=minutos*60;
   actualizarBadgeTimer();
   adminTimer=setInterval(function(){
     adminTimerSecs--;
@@ -582,13 +600,16 @@ function entrar(admin){
   var punto=document.getElementById('selPunto').value;
   var turno=document.getElementById('selTurno').value;
   var cajero=document.getElementById('selCajero').value.trim();
-  var cajeroAux=document.getElementById('selCajeroAux').value.trim();
+  var extras=cajerosExtras.filter(function(x){return x&&x.trim();});
+  var cajeroAux=extras.join(', ');
   var fecha=document.getElementById('selFecha').value;
   if(!punto){alert('Selecciona el punto de venta.');return;}
   if(!turno){alert('Selecciona el turno.');return;}
   if(!cajero){alert('Ingresa tu nombre.');return;}
   if(!fecha){alert('Selecciona la fecha.');return;}
   sesion={punto:punto,turno:turno,cajero:cajero,cajeroAux:cajeroAux,fecha:fecha};
+  cajerosExtras=[];
+  document.getElementById('cajerosList').innerHTML='';
   isAdmin=admin;
   var pN={autopista:'Vaca Autopista',boquia:'Vaca Boquia',tebaida:'Vaca Tebaida'}[punto];
   var tN=turno==='manana'?'☀ Mañana':turno==='tarde'?'🌙 Tarde':'⬛ Completo';
