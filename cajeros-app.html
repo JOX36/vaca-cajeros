@@ -396,10 +396,16 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
     <button class="modal-x" id="editTurnoX">✕</button>
     <div class="modal-title" id="editTurnoTitle">Editar Turno</div>
     <div class="modal-sub" id="editTurnoSub"></div>
+    <!-- Botones fijos arriba -->
+    <div style="display:flex;gap:8px;margin-bottom:12px;position:sticky;top:0;background:white;z-index:10;padding:6px 0;">
+      <button class="btn btn-cerrar" id="btnGuardarEdicion" style="flex:2;">💾 Guardar cambios</button>
+      <button class="btn" style="background:#eee;color:#333;flex:1;" id="btnCancelarEdicion">✕ Cancelar</button>
+    </div>
     <div id="editTurnoBody"></div>
-    <div class="modal-actions">
-      <button class="btn btn-cerrar" id="btnGuardarEdicion">💾 Guardar cambios</button>
-      <button class="btn" style="background:#eee;color:#333;" id="btnCancelarEdicion">Cancelar</button>
+    <!-- Botones también abajo -->
+    <div class="modal-actions" style="margin-top:12px;">
+      <button class="btn btn-cerrar" id="btnGuardarEdicion2">💾 Guardar cambios</button>
+      <button class="btn" style="background:#eee;color:#333;" id="btnCancelarEdicion2">Cancelar</button>
     </div>
   </div>
 </div>
@@ -501,6 +507,7 @@ document.getElementById('btnFaltantes').addEventListener('click', abrirFaltantes
 document.getElementById('histX').addEventListener('click', function(){document.getElementById('historialModal').classList.remove('open');});
 document.getElementById('editTurnoX').addEventListener('click', function(){document.getElementById('editTurnoModal').classList.remove('open');});
 document.getElementById('btnCancelarEdicion').addEventListener('click', function(){document.getElementById('editTurnoModal').classList.remove('open');});
+document.getElementById('btnCancelarEdicion2').addEventListener('click', function(){document.getElementById('editTurnoModal').classList.remove('open');});
 document.getElementById('btnConfirmar').addEventListener('click', confirmarCierre);
 document.getElementById('cierreX').addEventListener('click', function(){document.getElementById('cierreModal').classList.remove('open');});
 document.getElementById('btnCancelarCierre').addEventListener('click', function(){document.getElementById('cierreModal').classList.remove('open');});
@@ -1877,6 +1884,7 @@ function abrirEditarTurno(t){
   document.getElementById('historialModal').classList.remove('open');
   document.getElementById('editTurnoModal').classList.add('open');
   document.getElementById('btnGuardarEdicion').onclick=guardarEdicionTurno;
+  document.getElementById('btnGuardarEdicion2').onclick=guardarEdicionTurno;
 
   // Calcular resumen inicial
   setTimeout(calcEditTotales, 100);
@@ -1921,26 +1929,33 @@ function guardarEdicionTurno(){
   var tv=snap.reduce(function(s,r){return s+(r.total_venta||0);},0);
   var gas=(turnoEditando.gastos_list||[]).reduce(function(s,e){return s+(e.valor||0);},0);
   var ent=(turnoEditando.entregas_list||[]).reduce(function(s,e){return s+(e.valor||0);},0);
-  var ef=tv-gas-dat-tra;
-  sbUpsert('turnos_caja',{
-    turno_key:turnoEditando.turno_key,
-    punto:turnoEditando.punto,turno:turnoEditando.turno,
-    fecha:turnoEditando.fecha,cajero:turnoEditando.cajero,
-    cajero_aux:turnoEditando.cajero_aux||'',
+  var payload={
     snapshot:snap,
     gastos_list:turnoEditando.gastos_list||[],
     entregas_list:turnoEditando.entregas_list||[],
-    datafono_val:dat,transferencia_val:tra,
-    gastos:gas,digital:dat+tra,entregado:ent,
-    nota:nota,cerrado:true,
+    datafono_val:dat, transferencia_val:tra,
+    gastos:gas, digital:dat+tra, entregado:ent,
+    cajero:turnoEditando.cajero,
+    cajero_aux:turnoEditando.cajero_aux||'',
+    nota:nota, cerrado:true,
     eliminado:turnoEditando.eliminado||false,
     updated_at:new Date().toISOString()
-  }).then(function(){
-    setSyncStatus('ok','✓ Turno actualizado');
+  };
+  // Usar PATCH directo por turno_key para garantizar que actualiza
+  fetch(SB_URL+'/rest/v1/turnos_caja?turno_key=eq.'+encodeURIComponent(turnoEditando.turno_key),{
+    method:'PATCH',
+    headers:Object.assign({},HEADS,{'Prefer':'return=minimal'}),
+    body:JSON.stringify(payload)
+  }).then(function(r){
+    if(!r.ok) return r.text().then(function(t){throw new Error(t);});
+    setSyncStatus('ok','✓ Turno actualizado correctamente');
     document.getElementById('editTurnoModal').classList.remove('open');
     document.getElementById('historialModal').classList.add('open');
     buscarHistorial();
-  }).catch(function(e){setSyncStatus('err','✗ Error');alert('Error: '+e.message);});
+  }).catch(function(e){
+    setSyncStatus('err','✗ Error al guardar');
+    alert('Error al guardar: '+e.message);
+  });
 }
 
 // ── INIT ─────────────────────────────────────────
