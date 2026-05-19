@@ -271,7 +271,7 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
         <div class="res-block-title">Entregas de dinero en efectivo <span style="font-size:.62rem;background:#1a1a3a;color:#7a9fd4;padding:1px 6px;border-radius:3px;font-weight:700;">Solo Admin</span></div>
         <div class="entries-list" id="entregasLista"></div>
         <button class="btn-add-entry" id="btnAddEntrega" style="display:none;">＋ Agregar entrega</button>
-        <button id="btnEntregaFinal" style="display:none;width:100%;margin-top:6px;padding:8px;background:#1a4a1a;color:#7dbb7d;border:1.5px solid #4a8a4a;border-radius:6px;font-family:Inter,sans-serif;font-size:.78rem;font-weight:700;cursor:pointer;">✓ Marcar como entrega final</button>
+
         <div class="entry-total" id="entregaTotal">Total entregado: $0</div>
       </div>
       <div class="res-totales">
@@ -514,12 +514,7 @@ document.getElementById('btnCancelarCierre').addEventListener('click', function(
 document.getElementById('inNota').addEventListener('input', autoSave);
 document.getElementById('btnAddGasto').addEventListener('click', function(){addEntry('gastos');});
 document.getElementById('btnAddEntrega').addEventListener('click', function(){addEntry('entregas');});
-document.getElementById('btnEntregaFinal').addEventListener('click', function(){
-  if(entregas.length===0){alert('Agrega al menos una entrega antes de marcar como final.');return;}
-  entregaFinal=!entregaFinal;
-  actualizarBtnEntregaFinal();
-  recalc(); autoSave();
-});
+// btnEntregaFinal eliminado — ahora se maneja con checkbox por entrega
 
 // ── ADMIN UI ─────────────────────────────────────
 var adminTimer=null;
@@ -536,8 +531,7 @@ function showAdminUI(){
   if(btnFalt) btnFalt.style.display='flex';
   var btnE=document.getElementById('btnAddEntrega');
   if(btnE) btnE.style.display='block';
-  var btnEF=document.getElementById('btnEntregaFinal');
-  if(btnEF) btnEF.style.display='block';
+
   var fab=document.getElementById('fabAddProd');
   if(fab) fab.style.display='flex';
   // Mostrar botón agregar gasto (visible para todos ya)
@@ -565,8 +559,7 @@ function showAdminUI(){
       if(bFalt) bFalt.style.display='none';
       var bE=document.getElementById('btnAddEntrega');
       if(bE) bE.style.display='none';
-      var bEF=document.getElementById('btnEntregaFinal');
-      if(bEF) bEF.style.display='none';
+
       var f=document.getElementById('fabAddProd');
       if(f) f.style.display='none';
       buildTable();
@@ -950,6 +943,9 @@ function mkInp(r,field,borderColor){
   var inp=document.createElement('input'); inp.type='number'; inp.min='0'; inp.placeholder='';
   inp.value=(r[field]!==null&&r[field]!==undefined)?r[field]:'';
   if(borderColor) inp.style.borderColor=borderColor;
+  // Bloquear scroll y flechas para evitar cambios accidentales
+  inp.addEventListener('wheel',function(e){e.preventDefault();},{passive:false});
+  inp.addEventListener('keydown',function(e){if(e.key==='ArrowUp'||e.key==='ArrowDown')e.preventDefault();});
   inp.addEventListener('input',(function(row,f){return function(){
     row[f]=this.value===''?null:parseFloat(this.value);
     calcFila(row); updateFila(row); autoSave();
@@ -1005,33 +1001,62 @@ function renderEntries(tipo){
   var totalId=tipo==='gastos'?'gastoTotal':'entregaTotal';
   var totalLabel=tipo==='gastos'?'Total gastos':'Total entregado';
   var list=document.getElementById(listId); list.innerHTML='';
-  // Entregas: solo admin puede editar. Gastos: todos pueden editar
-  var soloLectura = (tipo==='entregas' && !isAdmin);
+  var soloLecturaEntregas=(tipo==='entregas'&&!isAdmin);
   arr.forEach(function(e,i){
-    var row=document.createElement('div'); row.className='entry-row';
-    if(soloLectura){
-      var lbl=document.createElement('span');
-      lbl.style.cssText='flex:2;font-size:.82rem;color:var(--negro);padding:4px 0;';
-      lbl.textContent=(e.desc||'Entrega')+(e.hora?' ⏱'+e.hora:'')+': '+fmt(e.valor);
+    var row=document.createElement('div');
+    row.style.cssText='display:flex;gap:5px;align-items:flex-start;margin-bottom:7px;';
+    if(soloLecturaEntregas){
+      // Cajero ve entregas en solo lectura con indicador de entrega final
+      var lbl=document.createElement('div');
+      lbl.style.cssText='flex:1;font-size:.82rem;color:var(--negro);padding:3px 0;';
+      lbl.innerHTML='<div style="font-weight:500;">'+(e.desc||'Entrega')+(e.hora?' <span style="font-size:.65rem;color:var(--gris4);">⏱'+e.hora+'</span>':'')+'</div>'
+        +'<div style="font-weight:700;">'+fmt(e.valor)+'</div>'
+        +(e.esFinal?'<div style="font-size:.68rem;color:var(--verde);font-weight:700;">✅ Entrega final</div>':'');
       row.appendChild(lbl);
     } else {
+      // Admin edita
+      var colIzq=document.createElement('div'); colIzq.style.cssText='display:flex;flex-direction:column;flex:2;gap:2px;';
       var inDesc=document.createElement('input'); inDesc.type='text';
       inDesc.placeholder=tipo==='entregas'?'Responsable':'Descripción';
-      inDesc.value=e.desc||'';
+      inDesc.value=e.desc||''; inDesc.className='entry-row input';
+      inDesc.style.cssText='padding:5px 7px;border:1.5px solid var(--gris2);border-radius:5px;font-family:Inter,sans-serif;font-size:.82rem;background:var(--gris1);width:100%;';
       inDesc.addEventListener('input',(function(entry){return function(){entry.desc=this.value;autoSave();};})(e));
-      var inVal=document.createElement('input'); inVal.type='number'; inVal.min='0'; inVal.placeholder='$0'; inVal.value=e.valor||'';
-      inVal.style.textAlign='right';
+      colIzq.appendChild(inDesc);
+      if(tipo==='entregas'&&e.hora){
+        var h=document.createElement('span');h.style.cssText='font-size:.65rem;color:var(--gris4);';h.textContent='⏱ '+e.hora;
+        colIzq.appendChild(h);
+      }
+      row.appendChild(colIzq);
+      var inVal=document.createElement('input'); inVal.type='number'; inVal.min='0';
+      inVal.placeholder='$0'; inVal.value=e.valor||''; inVal.style.textAlign='right';
+      inVal.style.cssText='flex:1;text-align:right;padding:5px 7px;border:1.5px solid var(--gris2);border-radius:5px;font-family:Inter,sans-serif;font-size:.82rem;background:var(--gris1);min-width:75px;';
       inVal.addEventListener('input',(function(entry){return function(){entry.valor=parseFloat(this.value)||0;recalc();autoSave();};})(e));
+      inVal.addEventListener('wheel',function(ev){ev.preventDefault();},{passive:false});
+      row.appendChild(inVal);
+      // Checkbox "Entrega final" solo para entregas
+      if(tipo==='entregas'){
+        var chkWrap=document.createElement('div');
+        chkWrap.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-width:32px;';
+        var chk=document.createElement('input'); chk.type='checkbox';
+        chk.checked=!!e.esFinal;
+        chk.title='Marcar como entrega final';
+        chk.style.cssText='width:18px;height:18px;cursor:pointer;accent-color:#2d6a2d;';
+        chk.addEventListener('change',(function(entry){return function(){
+          entregas.forEach(function(x){x.esFinal=false;});
+          if(this.checked) entry.esFinal=true;
+          entregaFinal=entregas.some(function(x){return x.esFinal;});
+          recalc(); autoSave();
+          renderEntries('entregas');
+        };})(e));
+        var chkLbl=document.createElement('span');
+        chkLbl.style.cssText='font-size:.55rem;color:var(--gris4);text-align:center;line-height:1.1;';
+        chkLbl.textContent='Final';
+        chkWrap.appendChild(chk); chkWrap.appendChild(chkLbl);
+        row.appendChild(chkWrap);
+      }
       var btnDel=document.createElement('button'); btnDel.className='btn-remove-entry'; btnDel.textContent='✕';
       btnDel.addEventListener('click',(function(t,idx){return function(){removeEntry(t,idx);};})(tipo,i));
-      if(tipo==='entregas'){
-        var wrap=document.createElement('div'); wrap.style.cssText='display:flex;flex-direction:column;flex:2;gap:2px;';
-        wrap.appendChild(inDesc);
-        if(e.hora){var h=document.createElement('span');h.style.cssText='font-size:.65rem;color:var(--gris4);';h.textContent='⏱ '+e.hora;wrap.appendChild(h);}
-        row.appendChild(wrap); row.appendChild(inVal); row.appendChild(btnDel);
-      } else {
-        row.appendChild(inDesc); row.appendChild(inVal); row.appendChild(btnDel);
-      }
+      row.appendChild(btnDel);
     }
     list.appendChild(row);
   });
@@ -1047,21 +1072,30 @@ function recalc(){
   var gas=gastos.reduce(function(s,e){return s+(e.valor||0);},0);
   var dat=parseFloat(document.getElementById('inDatafono')?document.getElementById('inDatafono').value:0)||0;
   var tra=parseFloat(document.getElementById('inTransferencia')?document.getElementById('inTransferencia').value:0)||0;
-  var ent=entregas.reduce(function(s,e){return s+(e.valor||0);},0);
+  // entregaFinal: si alguna entrega tiene esFinal marcado
+  entregaFinal=entregas.some(function(x){return x.esFinal;});
+  // Total entregado = entregas + datáfono + transferencia (si entrega final marcada)
+  var entEfectivo=entregas.reduce(function(s,e){return s+(e.valor||0);},0);
+  var ent=entregaFinal?(entEfectivo+dat+tra):entEfectivo;
   var ef=tv-gas-dat-tra;
   var dif=ent-ef;
-  document.getElementById('rTotalVentas').textContent=(isAdmin||entregaFinal)?fmt(tv):'—';
+  var mostrar=isAdmin||entregaFinal;
+  document.getElementById('rTotalVentas').textContent=mostrar?fmt(tv):'—';
   document.getElementById('rGastos').textContent=fmt(gas);
   document.getElementById('rDatafono').textContent=fmt(dat);
   document.getElementById('rTransferencia').textContent=fmt(tra);
-  document.getElementById('rEfectivo').textContent=(isAdmin||entregaFinal)?fmt(ef):'—';
+  document.getElementById('rEfectivo').textContent=mostrar?fmt(ef):'—';
   var rEnt=document.getElementById('rEntregado');
   var rDif=document.getElementById('rDiferencia');
-  if(ent>0){
-    rEnt.textContent=fmt(ent);
-    if(dif===0){rDif.textContent='✔ Cuadra';rDif.className='value val-ok';}
-    else if(dif<0){rDif.textContent='Falta '+fmt(Math.abs(dif));rDif.className='value val-falta';}
-    else{rDif.textContent='Sobran '+fmt(dif);rDif.className='value val-sobra';}
+  if(entEfectivo>0){
+    rEnt.textContent=mostrar?fmt(ent):fmt(entEfectivo);
+    if(mostrar){
+      if(dif===0){rDif.textContent='✔ Cuadra';rDif.className='value val-ok';}
+      else if(dif<0){rDif.textContent='Falta '+fmt(Math.abs(dif));rDif.className='value val-falta';}
+      else{rDif.textContent='Sobran '+fmt(dif);rDif.className='value val-sobra';}
+    } else {
+      rDif.textContent='— (pendiente entrega final)';rDif.className='value';
+    }
   }else{rEnt.textContent='—';rDif.textContent='—';rDif.className='value';}
 }
 
@@ -1385,21 +1419,7 @@ function imprimirTurno(){
 }
 
 // ── FALTANTES ────────────────────────────────────
-function actualizarBtnEntregaFinal(){
-  var btn=document.getElementById('btnEntregaFinal');
-  if(!btn) return;
-  if(entregaFinal){
-    btn.textContent='✓ Entrega final registrada — toca para desmarcar';
-    btn.style.background='#0a3a0a';
-    btn.style.color='#5dbb5d';
-    btn.style.borderColor='#2d6a2d';
-  } else {
-    btn.textContent='✓ Marcar como entrega final';
-    btn.style.background='#1a4a1a';
-    btn.style.color='#7dbb7d';
-    btn.style.borderColor='#4a8a4a';
-  }
-}
+function actualizarBtnEntregaFinal(){}// obsoleto
 
 function abrirFaltantes(){
   var hoy=new Date().toLocaleDateString('en-CA',{timeZone:'America/Bogota'});
