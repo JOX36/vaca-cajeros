@@ -253,8 +253,8 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
         <div class="res-block-title">Pago Datáfono</div>
         <div class="entry-row" style="margin-top:4px;">
           <span style="font-size:.78rem;color:var(--gris4);flex-shrink:0;">$</span>
-          <input type="number" id="inDatafono" min="0" placeholder="0" readonly
-            style="flex:1;padding:7px 10px;border:1.5px solid var(--gris2);border-radius:5px;font-family:Inter,sans-serif;font-size:.85rem;background:#f0f0f0;text-align:right;"
+          <input type="number" id="inDatafono" min="0" placeholder="0"
+            style="flex:1;padding:7px 10px;border:1.5px solid var(--gris2);border-radius:5px;font-family:Inter,sans-serif;font-size:.85rem;background:var(--gris1);text-align:right;"
             oninput="recalc();autoSave();">
         </div>
       </div>
@@ -262,8 +262,8 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
         <div class="res-block-title">Pago Transferencia</div>
         <div class="entry-row" style="margin-top:4px;">
           <span style="font-size:.78rem;color:var(--gris4);flex-shrink:0;">$</span>
-          <input type="number" id="inTransferencia" min="0" placeholder="0" readonly
-            style="flex:1;padding:7px 10px;border:1.5px solid var(--gris2);border-radius:5px;font-family:Inter,sans-serif;font-size:.85rem;background:#f0f0f0;text-align:right;"
+          <input type="number" id="inTransferencia" min="0" placeholder="0"
+            style="flex:1;padding:7px 10px;border:1.5px solid var(--gris2);border-radius:5px;font-family:Inter,sans-serif;font-size:.85rem;background:var(--gris1);text-align:right;"
             oninput="recalc();autoSave();">
         </div>
       </div>
@@ -540,14 +540,9 @@ function showAdminUI(){
   if(btnEF) btnEF.style.display='block';
   var fab=document.getElementById('fabAddProd');
   if(fab) fab.style.display='flex';
-  // Habilitar gastos para admin
+  // Mostrar botón agregar gasto (visible para todos ya)
   var btnG=document.getElementById('btnAddGasto');
   if(btnG) btnG.style.display='block';
-  // Habilitar datáfono y transferencia para admin
-  var inDat=document.getElementById('inDatafono');
-  if(inDat){inDat.readOnly=false;inDat.style.background='var(--gris1)';}
-  var inTra=document.getElementById('inTransferencia');
-  if(inTra){inTra.readOnly=false;inTra.style.background='var(--gris1)';}
   renderEntries('entregas');
   buildTable();
   // Timer 5 minutos
@@ -680,8 +675,8 @@ function cargarInventario(){
           setTimeout(function(){
             var dEl=document.getElementById('inDatafono');
             var tEl=document.getElementById('inTransferencia');
-            if(dEl){ dEl.value=saved.datafono_val||''; if(!isAdmin){dEl.readOnly=true;dEl.style.background='#f0f0f0';}}
-            if(tEl){ tEl.value=saved.transferencia_val||''; if(!isAdmin){tEl.readOnly=true;tEl.style.background='#f0f0f0';}}
+            if(dEl){ dEl.value=saved.datafono_val||'';}  
+            if(tEl){ tEl.value=saved.transferencia_val||'';}  
           },100);
         }
         // Si el turno ya fue cerrado, bloquearlo
@@ -1010,8 +1005,8 @@ function renderEntries(tipo){
   var totalId=tipo==='gastos'?'gastoTotal':'entregaTotal';
   var totalLabel=tipo==='gastos'?'Total gastos':'Total entregado';
   var list=document.getElementById(listId); list.innerHTML='';
-  // Gastos y Entregas: solo admin puede editar
-  var soloLectura = (!isAdmin);
+  // Entregas: solo admin puede editar. Gastos: todos pueden editar
+  var soloLectura = (tipo==='entregas' && !isAdmin);
   arr.forEach(function(e,i){
     var row=document.createElement('div'); row.className='entry-row';
     if(soloLectura){
