@@ -310,6 +310,7 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
 
   <div class="action-bar">
     <button class="btn btn-admin" id="btnAdminApp">⚙ Admin</button>
+    <button class="btn" style="background:#1a2a3a;color:#7ab0e0;display:none;" id="btnDashboard">📊 Dashboard</button>
     <button class="btn" style="background:#1a3a2a;color:#7dbb9d;display:none;" id="btnHistorial">📋 Historial</button>
     <button class="btn" style="background:#2a1a0a;color:#c8a050;display:none;" id="btnPapelera">🗑 Papelera</button>
     <button class="btn" style="background:#3a0a0a;color:#e88;display:none;" id="btnFaltantes">⚠ Faltantes</button>
@@ -410,6 +411,16 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
       <button class="btn btn-cerrar" id="btnGuardarEdicion2">💾 Guardar cambios</button>
       <button class="btn" style="background:#eee;color:#333;" id="btnCancelarEdicion2">Cancelar</button>
     </div>
+  </div>
+</div>
+
+<!-- MODAL DASHBOARD -->
+<div class="overlay" id="dashboardModal">
+  <div class="modal" style="max-width:620px;">
+    <button class="modal-x" onclick="document.getElementById('dashboardModal').classList.remove('open')">✕</button>
+    <div class="modal-title">📊 Dashboard — Hoy</div>
+    <div class="modal-sub" id="dashFecha"></div>
+    <div id="dashContenido"><p style="color:var(--gris4);text-align:center;padding:20px;">Cargando...</p></div>
   </div>
 </div>
 
@@ -523,6 +534,7 @@ document.getElementById('btnSaveAdmin').addEventListener('click', saveAdmin);
 document.getElementById('btnAddProd').addEventListener('click', addProdAdmin);
 document.getElementById('btnCerrar').addEventListener('click', abrirCierre);
 document.getElementById('btnImprimir').addEventListener('click', imprimirTurno);
+document.getElementById('btnDashboard').addEventListener('click', abrirDashboard);
 document.getElementById('btnHistorial').addEventListener('click', abrirHistorial);
 document.getElementById('btnPapelera').addEventListener('click', abrirPapelera);
 document.getElementById('btnFaltantes').addEventListener('click', abrirFaltantes);
@@ -572,6 +584,8 @@ function showAdminUI(){
 
   var fab=document.getElementById('fabAddProd');
   if(fab) fab.style.display='flex';
+  var btnDB=document.getElementById('btnDashboard');
+  if(btnDB) btnDB.style.display='flex';
   var btnEC=document.getElementById('btnEditCajero');
   if(btnEC) btnEC.style.display='inline-flex';
   renderEntries('entregas');
@@ -596,6 +610,8 @@ function showAdminUI(){
       if(bH) bH.style.display='none';
       var bPape=document.getElementById('btnPapelera');
       if(bPape) bPape.style.display='none';
+      var bDB=document.getElementById('btnDashboard');
+      if(bDB) bDB.style.display='none';
       var bEC=document.getElementById('btnEditCajero');
       if(bEC) bEC.style.display='none';
       var bE=document.getElementById('btnAddEntrega');
@@ -653,6 +669,7 @@ function salir(){
   var bH=document.getElementById('btnHistorial'); if(bH) bH.style.display='none';
   var bPape=document.getElementById('btnPapelera'); if(bPape) bPape.style.display='none';
   var bFalt=document.getElementById('btnFaltantes'); if(bFalt) bFalt.style.display='none';
+  var bDB=document.getElementById('btnDashboard'); if(bDB) bDB.style.display='none';
   var bEC=document.getElementById('btnEditCajero'); if(bEC) bEC.style.display='none';
   document.getElementById('loginScreen').style.display='flex';
   document.getElementById('appScreen').style.display='none';
@@ -1247,9 +1264,29 @@ function renderProdAdmin(){
       productos=productos.filter(function(x){return x.id!==prod.id;});
       renderProdAdmin();
     };})(p));
-    // Puntos donde aplica
+    // Check "todos" + puntos donde aplica
     var puntosWrap=document.createElement('div');
-    puntosWrap.style.cssText='display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;';
+    puntosWrap.style.cssText='display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;align-items:center;';
+    // Checkbox "Todos"
+    var lblTodos=document.createElement('label');
+    lblTodos.style.cssText='display:flex;align-items:center;gap:2px;font-size:.65rem;cursor:pointer;background:#1a3a1a;color:#7dbb7d;padding:2px 6px;border-radius:3px;border:1px solid #4a8a4a;font-weight:700;';
+    var chkTodos=document.createElement('input'); chkTodos.type='checkbox';
+    var todosActivos=(p.puntos||[]).length===TODOS_PUNTOS.length;
+    chkTodos.checked=todosActivos;
+    chkTodos.addEventListener('change',(function(prod,wrap){return function(){
+      if(this.checked){
+        prod.puntos=TODOS_PUNTOS.map(function(x){return x.id;});
+      } else {
+        prod.puntos=[];
+      }
+      // Actualizar todos los checkboxes individuales
+      wrap.querySelectorAll('input[type=checkbox]').forEach(function(c,i){
+        if(i>0) c.checked=!!this.checked;
+      }.bind(this));
+    };})(p,puntosWrap));
+    lblTodos.appendChild(chkTodos);
+    lblTodos.appendChild(document.createTextNode('✓ Todos'));
+    puntosWrap.appendChild(lblTodos);
     TODOS_PUNTOS.forEach(function(pt){
       var lbl=document.createElement('label');
       lbl.style.cssText='display:flex;align-items:center;gap:2px;font-size:.65rem;cursor:pointer;background:var(--gris1);padding:2px 5px;border-radius:3px;border:1px solid var(--gris2);';
@@ -1873,6 +1910,73 @@ function doReorder(srcId,tgtId){
     });
   })).then(function(){setSyncStatus('ok','✓ Orden guardado');})
      .catch(function(){setSyncStatus('err','✗ Error al guardar orden');});
+}
+
+// ── DASHBOARD ────────────────────────────────────
+function abrirDashboard(){
+  var hoy=new Date().toLocaleDateString('en-CA',{timeZone:'America/Bogota'});
+  document.getElementById('dashFecha').textContent='Fecha: '+hoy;
+  document.getElementById('dashContenido').innerHTML='<p style="color:var(--gris4);text-align:center;padding:20px;">Cargando...</p>';
+  document.getElementById('dashboardModal').classList.add('open');
+  sbGet('turnos_caja','fecha=eq.'+hoy+'&eliminado=eq.false&order=punto.asc,turno.asc')
+    .then(function(turnos){
+      var pN={autopista:'Vaca Autopista',boquia:'Vaca Boquia',tebaida:'Vaca Tebaida',
+              km25:'Vaca KM 25',km18:'Vaca KM 18',penon:'Vaca Peñón',colseguros:'Vaca Colseguros'};
+      var tN={manana:'☀ Mañana',tarde:'🌙 Tarde',completo:'⬛ Completo'};
+      var puntos=Object.keys(pN);
+      var cont=document.getElementById('dashContenido'); cont.innerHTML='';
+      var totalVentasDia=0,totalGastosDia=0,totalFaltantesDia=0,totalSobrantesDia=0;
+      puntos.forEach(function(punto){
+        var turnosPunto=turnos.filter(function(t){return t.punto===punto;});
+        var card=document.createElement('div');
+        if(!turnosPunto.length){
+          card.style.cssText='background:var(--gris1);border:1px solid var(--gris2);border-radius:8px;padding:9px 12px;margin-bottom:7px;opacity:.45;';
+          card.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;">'
+            +'<b style="font-size:.84rem;">'+pN[punto]+'</b>'
+            +'<span style="font-size:.7rem;color:var(--gris4);">Sin actividad hoy</span></div>';
+          cont.appendChild(card); return;
+        }
+        card.style.cssText='background:var(--blanco);border:1px solid var(--gris2);border-radius:8px;padding:12px;margin-bottom:10px;box-shadow:0 2px 8px rgba(0,0,0,.07);';
+        var html='<div style="font-weight:700;font-size:.88rem;color:var(--madera);margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid var(--gris2);">'+pN[punto]+'</div>';
+        var totalPunto=0,gastosPunto=0,difPunto=0;
+        turnosPunto.forEach(function(t){
+          var tv=(t.snapshot||[]).reduce(function(s,r){return s+(r.total_venta||0);},0);
+          var gas=t.gastos||0; var dig=t.digital||0;
+          var ef=tv-gas-dig; var ent=t.entregado||0; var dif=ent-ef;
+          totalPunto+=tv; gastosPunto+=gas; difPunto+=dif;
+          totalVentasDia+=tv; totalGastosDia+=gas;
+          if(dif<0) totalFaltantesDia+=Math.abs(dif);
+          if(dif>0) totalSobrantesDia+=dif;
+          var cIcon=t.cerrado?'<span style="color:var(--verde);font-weight:700;font-size:.72rem;">✅ Cerrado</span>':'<span style="color:#e65c00;font-weight:700;font-size:.72rem;">🔄 Abierto</span>';
+          var dc=dif===0?'var(--verde)':dif<0?'var(--rojo)':'#e65c00';
+          var dt=dif===0?'✔ Cuadra':dif<0?'Falta '+fmt(Math.abs(dif)):'Sobran '+fmt(dif);
+          html+='<div style="background:var(--gris1);border-radius:5px;padding:7px 9px;margin-bottom:5px;">'
+            +'<div style="display:flex;justify-content:space-between;margin-bottom:3px;">'
+            +'<b style="font-size:.78rem;">'+(tN[t.turno]||t.turno)+'</b>'+cIcon+'</div>'
+            +'<div style="font-size:.72rem;color:var(--gris4);margin-bottom:3px;">👤 '+(t.cajero||'—')+(t.cajero_aux?' & '+t.cajero_aux:'')+'</div>'
+            +'<div style="display:flex;justify-content:space-between;font-size:.76rem;">'
+            +'<span>Ventas: <b>'+fmt(tv)+'</b></span>'
+            +'<span>Gastos: <b>'+fmt(gas)+'</b></span>'
+            +'<span style="color:'+dc+';font-weight:700;">'+dt+'</span></div></div>';
+        });
+        var dc2=difPunto===0?'var(--verde)':difPunto<0?'var(--rojo)':'#e65c00';
+        var dt2=difPunto===0?'✔ Cuadra':difPunto<0?'Falta '+fmt(Math.abs(difPunto)):'Sobran '+fmt(difPunto);
+        html+='<div style="display:flex;justify-content:space-between;padding:5px 2px;font-size:.76rem;border-top:1px solid var(--gris2);margin-top:2px;">'
+          +'<b>Total: '+fmt(totalPunto)+'</b><b style="color:'+dc2+';">'+dt2+'</b></div>';
+        card.innerHTML=html; cont.appendChild(card);
+      });
+      var resumen=document.createElement('div');
+      resumen.style.cssText='background:var(--negro);color:white;border-radius:8px;padding:13px;margin-top:4px;';
+      var dfColor=totalFaltantesDia>0?'var(--rojo)':totalSobrantesDia>0?'#e65c00':'var(--verde)';
+      var dfTxt=totalFaltantesDia>0?'Falta: '+fmt(totalFaltantesDia):totalSobrantesDia>0?'Sobra: '+fmt(totalSobrantesDia):'✔ Todo cuadra';
+      resumen.innerHTML='<div style="font-size:.68rem;text-transform:uppercase;letter-spacing:.5px;color:#777;margin-bottom:7px;">Resumen del día</div>'
+        +'<div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:.78rem;"><span style="color:#bbb;">Total ventas</span><b>'+fmt(totalVentasDia)+'</b></div>'
+        +'<div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:.78rem;"><span style="color:#bbb;">Total gastos</span><b>'+fmt(totalGastosDia)+'</b></div>'
+        +'<div style="display:flex;justify-content:space-between;padding-top:6px;border-top:1px solid #333;font-size:.82rem;">'
+        +'<b style="color:#bbb;">Diferencia general</b><b style="color:'+dfColor+';">'+dfTxt+'</b></div>';
+      cont.appendChild(resumen);
+    })
+    .catch(function(e){document.getElementById('dashContenido').innerHTML='<p style="color:var(--rojo);text-align:center;padding:12px;">Error: '+e.message+'</p>';});
 }
 
 // ── HISTORIAL ────────────────────────────────────
