@@ -708,22 +708,27 @@ function cargarInventario(){
             invAnt[p.id]=p.inv_final!==null&&p.inv_final!==undefined?p.inv_final:0;
           });
         }
-        invRows=productosPunto.map(function(p){
-          var sv=saved&&saved.snapshot?saved.snapshot.find(function(s){return s.id===p.id;}):null;
-          // Si ya existe turno guardado: respetar el ant del snapshot (puede haber sido editado por admin)
-          // Si es turno nuevo: tomar inv_final del turno anterior
-          var antVal;
-          if(saved){
-            antVal=sv&&sv.ant!==null&&sv.ant!==undefined?sv.ant:0;
-          } else {
-            antVal=invAnt[p.id]!==undefined?invAnt[p.id]:0;
-          }
-          return {id:p.id,name:p.name,precio:p.precio||0,
-            ant:antVal,
-            entradas:sv?(sv.entradas&&sv.entradas.length?sv.entradas:(sv.entrante?[sv.entrante]:[])):[],
-            entrante:sv?sv.entrante:null,dev:sv?sv.dev:null,inv_final:sv?sv.inv_final:null,pedido:sv?sv.pedido:null,
-            disponible:0,vendido:0,total_venta:0};
-        });
+        // Si hay turno guardado, reconstruir invRows desde el snapshot
+        // para no perder productos que estaban en el turno aunque hayan cambiado sus puntos
+        if(saved && saved.snapshot && saved.snapshot.length){
+          invRows=saved.snapshot.map(function(sv){
+            var p=productos.find(function(x){return x.id===sv.id;})||{id:sv.id,name:sv.name,precio:sv.precio||0};
+            return {id:p.id,name:p.name,precio:p.precio||0,
+              ant:sv.ant!==null&&sv.ant!==undefined?sv.ant:0,
+              entradas:sv.entradas&&sv.entradas.length?sv.entradas:(sv.entrante?[sv.entrante]:[]),
+              entrante:sv.entrante,dev:sv.dev,inv_final:sv.inv_final,pedido:sv.pedido||null,
+              disponible:0,vendido:0,total_venta:0};
+          });
+        } else {
+          // Turno nuevo: usar productosPunto con inv_final del turno anterior
+          invRows=productosPunto.map(function(p){
+            var antVal=invAnt[p.id]!==undefined?invAnt[p.id]:0;
+            return {id:p.id,name:p.name,precio:p.precio||0,
+              ant:antVal,
+              entradas:[],entrante:null,dev:null,inv_final:null,pedido:null,
+              disponible:0,vendido:0,total_venta:0};
+          });
+        }
         // Limpiar siempre primero para evitar que persistan valores del turno anterior
         var dEl0=document.getElementById('inDatafono'); if(dEl0) dEl0.value='';
         var tEl0=document.getElementById('inTransferencia'); if(tEl0) tEl0.value='';
