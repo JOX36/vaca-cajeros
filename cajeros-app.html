@@ -709,13 +709,16 @@ function cargarInventario(){
           setTimeout(function(){
             var dEl=document.getElementById('inDatafono');
             var tEl=document.getElementById('inTransferencia');
-            if(dEl){ dEl.value=saved.datafono_val||'';}  
-            if(tEl){ tEl.value=saved.transferencia_val||'';}  
-          },100);
+            if(dEl){ dEl.value=saved.datafono_val||'';}
+            if(tEl){ tEl.value=saved.transferencia_val||'';}
+            recalc(); // Recalcular después de cargar valores de datáfono/transferencia
+          },150);
         }
         // Si el turno ya fue cerrado, bloquearlo
         if(saved && saved.cerrado && !isAdmin){
           window._turnoCerrado=true;
+          // Turno cerrado: mostrar todos los valores (ya no hay nada que ocultar)
+          entregaFinal=true;
           // Bloquear campos de resumen
           var inDat=document.getElementById('inDatafono'); if(inDat){inDat.readOnly=true;inDat.style.background='#f0f0f0';}
           var inTra=document.getElementById('inTransferencia'); if(inTra){inTra.readOnly=true;inTra.style.background='#f0f0f0';}
