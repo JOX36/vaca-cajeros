@@ -165,6 +165,10 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
         <option value="autopista">Vaca Autopista</option>
         <option value="boquia">Vaca Boquia</option>
         <option value="tebaida">Vaca Tebaida</option>
+        <option value="km25">Vaca KM 25</option>
+        <option value="km18">Vaca KM 18</option>
+        <option value="penon">Vaca Peñón</option>
+        <option value="colseguros">Vaca Colseguros</option>
       </select>
     </div>
     <div class="grid2">
@@ -630,7 +634,7 @@ function entrar(admin){
   cajerosExtras=[];
   document.getElementById('cajerosList').innerHTML='';
   isAdmin=admin;
-  var pN={autopista:'Vaca Autopista',boquia:'Vaca Boquia',tebaida:'Vaca Tebaida'}[punto];
+  var pN={autopista:'Vaca Autopista',boquia:'Vaca Boquia',tebaida:'Vaca Tebaida',km25:'Vaca KM 25',km18:'Vaca KM 18',penon:'Vaca Peñón',colseguros:'Vaca Colseguros'}[punto];
   var tN=turno==='manana'?'☀ Mañana':turno==='tarde'?'🌙 Tarde':'⬛ Completo';
   document.getElementById('hdrSub').textContent=pN+' · '+fecha;
   document.getElementById('turnoBadge').textContent=tN+' — '+cajero+(cajeroAux?' & '+cajeroAux:'');
@@ -660,7 +664,11 @@ function cargarInventario(){
   sbGet('productos_caja','order=orden.asc,id.asc')
     .then(function(prods){
       productos=prods.filter(function(p){return p.name&&p.name.trim();})
-        .map(function(p){return {id:p.id,name:p.name,precio:p.precio||0};});
+        .map(function(p){return {id:p.id,name:p.name,precio:p.precio||0,puntos:p.puntos||['autopista','boquia','tebaida']};});
+      // Filtrar solo productos que aplican para este punto
+      var productosPunto=productos.filter(function(p){
+        return !p.puntos||p.puntos.length===0||p.puntos.indexOf(sesion.punto)!==-1;
+      });
       var turnoKey=sesion.fecha+'_'+sesion.punto+'_'+sesion.turno;
       Promise.all([
         // Turno actual
@@ -683,7 +691,7 @@ function cargarInventario(){
             invAnt[p.id]=p.inv_final!==null&&p.inv_final!==undefined?p.inv_final:0;
           });
         }
-        invRows=productos.map(function(p){
+        invRows=productosPunto.map(function(p){
           var sv=saved&&saved.snapshot?saved.snapshot.find(function(s){return s.id===p.id;}):null;
           // Si ya existe turno guardado: respetar el ant del snapshot (puede haber sido editado por admin)
           // Si es turno nuevo: tomar inv_final del turno anterior
@@ -1204,6 +1212,16 @@ function openAdmin(){
   }).catch(function(e){setSyncStatus('err','✗ Error');alert('Error al cargar productos: '+e.message);});
 }
 
+var TODOS_PUNTOS=[
+  {id:'autopista',label:'Autopista'},
+  {id:'boquia',label:'Boquia'},
+  {id:'tebaida',label:'Tebaida'},
+  {id:'km25',label:'KM 25'},
+  {id:'km18',label:'KM 18'},
+  {id:'penon',label:'Peñón'},
+  {id:'colseguros',label:'Colseguros'}
+];
+
 function renderProdAdmin(){
   var list=document.getElementById('prodAdminList'); list.innerHTML='';
   if(!productos.length){
@@ -1229,7 +1247,31 @@ function renderProdAdmin(){
       productos=productos.filter(function(x){return x.id!==prod.id;});
       renderProdAdmin();
     };})(p));
-    row.appendChild(nameEl); row.appendChild(precioWrap); row.appendChild(btnDel);
+    // Puntos donde aplica
+    var puntosWrap=document.createElement('div');
+    puntosWrap.style.cssText='display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;';
+    TODOS_PUNTOS.forEach(function(pt){
+      var lbl=document.createElement('label');
+      lbl.style.cssText='display:flex;align-items:center;gap:2px;font-size:.65rem;cursor:pointer;background:var(--gris1);padding:2px 5px;border-radius:3px;border:1px solid var(--gris2);';
+      var chk=document.createElement('input'); chk.type='checkbox';
+      chk.checked=(p.puntos||[]).indexOf(pt.id)!==-1;
+      chk.addEventListener('change',(function(prod,ptId){return function(){
+        if(!prod.puntos) prod.puntos=['autopista','boquia','tebaida'];
+        if(this.checked){
+          if(prod.puntos.indexOf(ptId)===-1) prod.puntos.push(ptId);
+        } else {
+          prod.puntos=prod.puntos.filter(function(x){return x!==ptId;});
+        }
+      };})(p,pt.id));
+      lbl.appendChild(chk);
+      lbl.appendChild(document.createTextNode(pt.label));
+      puntosWrap.appendChild(lbl);
+    });
+    row.style.flexDirection='column';
+    var topRow=document.createElement('div');
+    topRow.style.cssText='display:flex;gap:6px;align-items:center;width:100%;';
+    topRow.appendChild(nameEl); topRow.appendChild(precioWrap); topRow.appendChild(btnDel);
+    row.appendChild(topRow); row.appendChild(puntosWrap);
     list.appendChild(row);
   });
 }
@@ -1277,7 +1319,7 @@ function saveAdmin(){
       return fetch(SB_URL+'/rest/v1/productos_caja?id=eq.'+p.id,{
         method:'PATCH',
         headers:Object.assign({},HEADS,{'Prefer':'return=minimal'}),
-        body:JSON.stringify({precio:p.precio,orden:i,updated_at:new Date().toISOString()})
+        body:JSON.stringify({precio:p.precio,puntos:p.puntos||['autopista','boquia','tebaida'],orden:i,updated_at:new Date().toISOString()})
       }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t);});});
     }
   });
@@ -1349,7 +1391,7 @@ function abrirCierre(){
   var tra=parseFloat(document.getElementById('inTransferencia')?document.getElementById('inTransferencia').value:0)||0;
   var ef=tv-gas-dat-tra;
   var dif=ent-ef;
-  var pN={autopista:'Vaca Autopista',boquia:'Vaca Boquia',tebaida:'Vaca Tebaida'}[sesion.punto];
+  var pN={autopista:'Vaca Autopista',boquia:'Vaca Boquia',tebaida:'Vaca Tebaida',km25:'Vaca KM 25',km18:'Vaca KM 18',penon:'Vaca Peñón',colseguros:'Vaca Colseguros'}[sesion.punto];
   var tN=sesion.turno==='manana'?'☀ Mañana':sesion.turno==='tarde'?'🌙 Tarde':'⬛ Completo';
   var nota=document.getElementById('inNota').value;
   var difTxt=dif===0?'✔ Cuadra exacto':dif<0?'⚠ Falta '+fmt(Math.abs(dif)):'⚠ Sobran '+fmt(dif);
@@ -1405,7 +1447,7 @@ function confirmarCierre(){
 // ── IMPRIMIR ─────────────────────────────────────
 function imprimirTurno(){
   if(!sesion)return;
-  var pN={autopista:'Vaca Autopista',boquia:'Vaca Boquia',tebaida:'Vaca Tebaida'}[sesion.punto];
+  var pN={autopista:'Vaca Autopista',boquia:'Vaca Boquia',tebaida:'Vaca Tebaida',km25:'Vaca KM 25',km18:'Vaca KM 18',penon:'Vaca Peñón',colseguros:'Vaca Colseguros'}[sesion.punto];
   var tN=sesion.turno==='manana'?'☀ Mañana':sesion.turno==='tarde'?'🌙 Tarde':'⬛ Completo';
   var tv=invRows.reduce(function(s,r){return s+r.total_venta;},0);
   var gas=gastos.reduce(function(s,e){return s+(e.valor||0);},0);
@@ -1610,7 +1652,7 @@ function buscarFaltantes(){
         porCajero[r.cajero].total+=r.faltante;
       });
 
-      var pN={autopista:'Autopista',boquia:'Boquia',tebaida:'Tebaida'};
+      var pN={autopista:'Autopista',boquia:'Boquia',tebaida:'Tebaida',km25:'KM 25',km18:'KM 18',penon:'Peñón',colseguros:'Colseguros'};
       var tN={manana:'Caja Mañana',tarde:'Caja Tarde',completo:'Caja Completa'};
 
       res.innerHTML='';
@@ -1721,10 +1763,11 @@ function fabAgregarProducto(){
   var precio=parseFloat(precioStr)||0;
   var id='vta_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
   setSyncStatus('sync','⟳ Guardando...');
+  var puntosDefault=['autopista','boquia','tebaida','km25','km18','penon','colseguros'];
   fetch(SB_URL+'/rest/v1/productos_caja',{
     method:'POST',
     headers:Object.assign({},HEADS,{'Prefer':'resolution=merge-duplicates'}),
-    body:JSON.stringify({id:id,name:name.trim(),precio:precio,orden:invRows.length,updated_at:new Date().toISOString()})
+    body:JSON.stringify({id:id,name:name.trim(),precio:precio,puntos:puntosDefault,orden:invRows.length,updated_at:new Date().toISOString()})
   }).then(function(r){
     if(!r.ok) return r.text().then(function(t){throw new Error(t);});
     var nuevo={id:id,name:name.trim(),precio:precio,ant:0,entrante:null,dev:null,inv_final:null,disponible:0,vendido:0,total_venta:0};
@@ -1761,7 +1804,7 @@ function abrirPapelera(){
         res.innerHTML='<p style="color:var(--gris4);font-size:.8rem;text-align:center;padding:12px;">La papelera está vacía.</p>';
         return;
       }
-      var pN={autopista:'Vaca Autopista',boquia:'Vaca Boquia',tebaida:'Vaca Tebaida'};
+      var pN={autopista:'Vaca Autopista',boquia:'Vaca Boquia',tebaida:'Vaca Tebaida',km25:'Vaca KM 25',km18:'Vaca KM 18',penon:'Vaca Peñón',colseguros:'Vaca Colseguros'};
       var tN={manana:'☀ Mañana',tarde:'🌙 Tarde',completo:'⬛ Completo'};
       res.innerHTML='';
       turnos.forEach(function(t){
@@ -1852,7 +1895,7 @@ function buscarHistorial(){
         res.innerHTML='<p style="color:var(--gris4);font-size:.8rem;padding:12px 0;text-align:center;">No hay turnos cerrados para esta fecha.</p>';
         return;
       }
-      var pN={autopista:'Vaca Autopista',boquia:'Vaca Boquia',tebaida:'Vaca Tebaida'};
+      var pN={autopista:'Vaca Autopista',boquia:'Vaca Boquia',tebaida:'Vaca Tebaida',km25:'Vaca KM 25',km18:'Vaca KM 18',penon:'Vaca Peñón',colseguros:'Vaca Colseguros'};
       var tN={manana:'☀ Mañana',tarde:'🌙 Tarde',completo:'⬛ Completo'};
       res.innerHTML='';
       turnos.forEach(function(t){
@@ -1924,7 +1967,7 @@ function calcEditTotales(){
 
 function abrirEditarTurno(t){
   turnoEditando = JSON.parse(JSON.stringify(t));
-  var pN={autopista:'Vaca Autopista',boquia:'Vaca Boquia',tebaida:'Vaca Tebaida'};
+  var pN={autopista:'Vaca Autopista',boquia:'Vaca Boquia',tebaida:'Vaca Tebaida',km25:'Vaca KM 25',km18:'Vaca KM 18',penon:'Vaca Peñón',colseguros:'Vaca Colseguros'};
   var tN={manana:'☀ Mañana',tarde:'🌙 Tarde',completo:'⬛ Completo'};
   document.getElementById('editTurnoTitle').textContent='✏ Editar: '+(pN[t.punto]||t.punto)+' — '+(tN[t.turno]||t.turno);
   document.getElementById('editTurnoSub').textContent=t.fecha+' · Cajero: '+(t.cajero||'—')+(t.cajero_aux?' & '+t.cajero_aux:'');
