@@ -206,6 +206,7 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
     <div class="hdr-right">
       <span id="syncStatus"></span>
       <span class="admin-badge" id="adminBadge">🔑 Admin</span>
+      <button class="btn-sm" id="btnEditCajero" onclick="abrirEditCajero()" style="display:none;font-size:.65rem;padding:3px 7px;" title="Editar nombre del cajero">✏ Cajero</button>
       <span class="turno-badge" id="turnoBadge">—</span>
       <button class="btn-sm" id="btnSalir">✕ Salir</button>
     </div>
@@ -408,6 +409,25 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
   </div>
 </div>
 
+<!-- MODAL EDITAR CAJERO -->
+<div class="overlay" id="editCajeroModal">
+  <div class="modal modal-sm">
+    <button class="modal-x" onclick="document.getElementById('editCajeroModal').classList.remove('open')">✕</button>
+    <div class="modal-title">✏ Editar Cajeros del Turno</div>
+    <div class="modal-sub">Corrige nombres o agrega cajeros</div>
+    <div class="modal-field">
+      <label>Cajero Principal</label>
+      <input type="text" id="editCajeroPrincipal" placeholder="Nombre completo">
+    </div>
+    <div id="editCajerosExtras"></div>
+    <button type="button" onclick="agregarEditCajero()" style="width:100%;padding:7px;background:transparent;border:1.5px dashed var(--gris3);border-radius:7px;color:var(--gris4);font-family:'Inter',sans-serif;font-size:.78rem;cursor:pointer;margin-bottom:12px;">＋ Agregar cajero</button>
+    <div class="modal-actions">
+      <button class="btn btn-cerrar" onclick="guardarEditCajero()">💾 Guardar</button>
+      <button class="btn" style="background:#eee;color:#333;" onclick="document.getElementById('editCajeroModal').classList.remove('open')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL NOTA COMPAÑERO -->
 <div class="overlay" id="notaCompModal">
   <div class="modal modal-sm" style="text-align:center;">
@@ -548,9 +568,8 @@ function showAdminUI(){
 
   var fab=document.getElementById('fabAddProd');
   if(fab) fab.style.display='flex';
-  // Mostrar botón agregar gasto (visible para todos ya)
-  var btnG=document.getElementById('btnAddGasto');
-  if(btnG) btnG.style.display='block';
+  var btnEC=document.getElementById('btnEditCajero');
+  if(btnEC) btnEC.style.display='inline-flex';
   renderEntries('entregas');
   buildTable();
   // Timer 5 minutos
@@ -573,8 +592,8 @@ function showAdminUI(){
       if(bH) bH.style.display='none';
       var bPape=document.getElementById('btnPapelera');
       if(bPape) bPape.style.display='none';
-      var bFalt=document.getElementById('btnFaltantes');
-      if(bFalt) bFalt.style.display='none';
+      var bEC=document.getElementById('btnEditCajero');
+      if(bEC) bEC.style.display='none';
       var bE=document.getElementById('btnAddEntrega');
       if(bE) bE.style.display='none';
 
@@ -630,6 +649,7 @@ function salir(){
   var bH=document.getElementById('btnHistorial'); if(bH) bH.style.display='none';
   var bPape=document.getElementById('btnPapelera'); if(bPape) bPape.style.display='none';
   var bFalt=document.getElementById('btnFaltantes'); if(bFalt) bFalt.style.display='none';
+  var bEC=document.getElementById('btnEditCajero'); if(bEC) bEC.style.display='none';
   document.getElementById('loginScreen').style.display='flex';
   document.getElementById('appScreen').style.display='none';
 }
@@ -1295,6 +1315,19 @@ function abrirCierre(){
     alert('❌ No se puede cerrar el turno.\n\nLos siguientes productos tienen inventario final mayor al disponible:\n\n'+lista+'\n\nRevisa y corrige antes de cerrar.');
     return;
   }
+  // Validar que todos los productos con movimiento tengan Inv.Final
+  var sinFinal=invRows.filter(function(r){
+    var tuvoMovimiento=(r.ant||0)>0||(r.entrante||0)>0||r.disponible>0;
+    var noTieneInvFinal=r.inv_final===null||r.inv_final===undefined||r.inv_final==='';
+    return tuvoMovimiento && noTieneInvFinal;
+  });
+  if(sinFinal.length){
+    var lista2=sinFinal.map(function(r){
+      return '• '+r.name+' (disponible: '+r.disponible+')';
+    }).join('\n');
+    alert('❌ No se puede cerrar el turno.\n\nFaltan inventarios finales en:\n\n'+lista2+'\n\nDebes contar y registrar el inventario final de todos los productos con movimiento.');
+    return;
+  }
   // Validar que haya entregas registradas
   var ent=entregas.reduce(function(s,e){return s+(e.valor||0);},0);
   if(!entregas.length || ent<=0){
@@ -1443,7 +1476,64 @@ function imprimirTurno(){
   setTimeout(function(){w.print();},400);
 }
 
-// ── FALTANTES ────────────────────────────────────
+// ── EDITAR CAJERO ────────────────────────────────
+var editCajerosExtras=[];
+
+function abrirEditCajero(){
+  if(!sesion) return;
+  // Cargar valores actuales
+  document.getElementById('editCajeroPrincipal').value=sesion.cajero||'';
+  editCajerosExtras=(sesion.cajeroAux&&sesion.cajeroAux.trim())
+    ? sesion.cajeroAux.split(',').map(function(x){return x.trim();}).filter(Boolean)
+    : [];
+  renderEditCajerosExtras();
+  document.getElementById('editCajeroModal').classList.add('open');
+}
+
+function renderEditCajerosExtras(){
+  var cont=document.getElementById('editCajerosExtras');
+  cont.innerHTML='';
+  editCajerosExtras.forEach(function(nombre,i){
+    var div=document.createElement('div');
+    div.className='modal-field';
+    div.style.display='flex'; div.style.gap='6px';
+    var inp=document.createElement('input'); inp.type='text';
+    inp.value=nombre; inp.placeholder='Nombre cajero '+(i+2);
+    inp.style.cssText='flex:1;padding:8px 11px;border:1.5px solid var(--gris2);border-radius:6px;font-family:Inter,sans-serif;font-size:.85rem;background:var(--gris1);';
+    inp.addEventListener('input',(function(idx){return function(){editCajerosExtras[idx]=this.value.trim();};})(i));
+    var btnX=document.createElement('button'); btnX.type='button'; btnX.textContent='✕';
+    btnX.style.cssText='padding:0 10px;border:1.5px solid var(--gris2);border-radius:6px;background:transparent;color:#aaa;cursor:pointer;';
+    btnX.addEventListener('click',(function(idx){return function(){editCajerosExtras.splice(idx,1);renderEditCajerosExtras();};})(i));
+    div.appendChild(inp); div.appendChild(btnX);
+    cont.appendChild(div);
+  });
+}
+
+function agregarEditCajero(){
+  editCajerosExtras.push('');
+  renderEditCajerosExtras();
+  // Focus en el último input
+  setTimeout(function(){
+    var inputs=document.getElementById('editCajerosExtras').querySelectorAll('input');
+    if(inputs.length) inputs[inputs.length-1].focus();
+  },50);
+}
+
+function guardarEditCajero(){
+  var principal=document.getElementById('editCajeroPrincipal').value.trim();
+  if(!principal){alert('El nombre del cajero principal no puede estar vacío.');return;}
+  var extras=editCajerosExtras.filter(function(x){return x&&x.trim();});
+  var aux=extras.join(', ');
+  sesion.cajero=principal;
+  sesion.cajeroAux=aux;
+  // Actualizar header
+  var tN=sesion.turno==='manana'?'☀ Mañana':sesion.turno==='tarde'?'🌙 Tarde':'⬛ Completo';
+  document.getElementById('turnoBadge').textContent=tN+' — '+principal+(aux?' & '+aux:'');
+  // Guardar en Supabase
+  autoSave();
+  document.getElementById('editCajeroModal').classList.remove('open');
+  setSyncStatus('ok','✓ Cajero actualizado');
+}
 function actualizarBtnEntregaFinal(){}// obsoleto
 
 function abrirFaltantes(){
