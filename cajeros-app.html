@@ -108,6 +108,7 @@ td input[readonly]{background:#f0f0f0;color:#888;cursor:not-allowed;border-color
 .nota-field input{width:100%;padding:8px 10px;border:1.5px solid var(--gris2);border-radius:5px;font-family:'Inter',sans-serif;font-size:.84rem;background:var(--gris1);}
 .nota-field input:focus{outline:none;border-color:var(--madera);}
 .action-bar{position:fixed;bottom:0;left:0;right:0;background:var(--negro2);border-top:1px solid #333;padding:9px 16px;display:flex;gap:7px;}
+.action-bar::-webkit-scrollbar{display:none;}
 .btn{font-family:'Inter',sans-serif;font-size:.74rem;font-weight:600;padding:9px 12px;border:none;border-radius:6px;cursor:pointer;flex:1;display:flex;align-items:center;justify-content:center;gap:4px;}
 .btn-cerrar{background:var(--madera);color:white;}
 .btn-imprimir{background:#1a4a1a;color:#7dbb7d;}
@@ -307,14 +308,14 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
     </div>
   </div>
 
-  <div class="action-bar">
-    <button class="btn btn-admin" id="btnAdminApp">⚙ Admin</button>
-    <button class="btn" style="background:#1a2a3a;color:#7ab0e0;display:none;" id="btnDashboard">📊 Dashboard</button>
-    <button class="btn" style="background:#1a3a2a;color:#7dbb9d;display:none;" id="btnHistorial">📋 Historial</button>
-    <button class="btn" style="background:#2a1a0a;color:#c8a050;display:none;" id="btnPapelera">🗑 Papelera</button>
-    <button class="btn" style="background:#3a0a0a;color:#e88;display:none;" id="btnFaltantes">⚠ Faltantes</button>
-    <button class="btn btn-imprimir" id="btnImprimir">🖨 Imprimir</button>
-    <button class="btn btn-cerrar" id="btnCerrar">📅 Cerrar Turno</button>
+  <div class="action-bar" style="overflow-x:auto;overflow-y:hidden;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px;">
+    <button class="btn btn-admin" id="btnAdminApp" style="flex-shrink:0;">⚙ Admin</button>
+    <button class="btn" style="background:#1a2a3a;color:#7ab0e0;display:none;flex-shrink:0;" id="btnDashboard">📊 Dashboard</button>
+    <button class="btn" style="background:#1a3a2a;color:#7dbb9d;display:none;flex-shrink:0;" id="btnHistorial">📋 Historial</button>
+    <button class="btn" style="background:#2a1a0a;color:#c8a050;display:none;flex-shrink:0;" id="btnPapelera">🗑 Papelera</button>
+    <button class="btn" style="background:#3a0a0a;color:#e88;display:none;flex-shrink:0;" id="btnFaltantes">⚠ Faltantes</button>
+    <button class="btn btn-imprimir" id="btnImprimir" style="flex-shrink:0;">🖨 Imprimir</button>
+    <button class="btn btn-cerrar" id="btnCerrar" style="flex-shrink:0;">📅 Cerrar Turno</button>
   </div>
   <!-- FAB agregar producto (solo admin) -->
   <button id="fabAddProd" onclick="fabAgregarProducto()" style="display:none;position:fixed;bottom:70px;right:16px;width:48px;height:48px;border-radius:50%;background:var(--madera);color:white;border:none;font-size:1.4rem;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.3);z-index:100;align-items:center;justify-content:center;">＋</button>
