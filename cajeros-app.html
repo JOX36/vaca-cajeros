@@ -414,6 +414,30 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
   </div>
 </div>
 
+<!-- MODAL NUEVO PRODUCTO -->
+<div class="overlay" id="nuevoProdModal">
+  <div class="modal modal-sm">
+    <button class="modal-x" onclick="document.getElementById('nuevoProdModal').classList.remove('open')">✕</button>
+    <div class="modal-title">＋ Nuevo Producto</div>
+    <div class="modal-field">
+      <label>Nombre</label>
+      <input type="text" id="npNombre" placeholder="Nombre del producto">
+    </div>
+    <div class="modal-field">
+      <label>Precio</label>
+      <input type="number" id="npPrecio" placeholder="0" min="0">
+    </div>
+    <div class="modal-field">
+      <label>Puntos donde aplica</label>
+      <div id="npPuntos" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-cerrar" onclick="guardarNuevoProducto()">＋ Agregar</button>
+      <button class="btn" style="background:#eee;color:#333;" onclick="document.getElementById('nuevoProdModal').classList.remove('open')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL DASHBOARD -->
 <div class="overlay" id="dashboardModal">
   <div class="modal" style="max-width:620px;">
@@ -681,10 +705,17 @@ function cargarInventario(){
   sbGet('productos_caja','order=orden.asc,id.asc')
     .then(function(prods){
       productos=prods.filter(function(p){return p.name&&p.name.trim();})
-        .map(function(p){return {id:p.id,name:p.name,precio:p.precio||0,puntos:p.puntos||['autopista','boquia','tebaida']};});
+        .map(function(p){
+          // Supabase puede devolver puntos como string JSON — parsear si necesario
+          var pts=p.puntos;
+          if(typeof pts==='string'){try{pts=JSON.parse(pts);}catch(e){pts=null;}}
+          return {id:p.id,name:p.name,precio:p.precio||0,
+            puntos:Array.isArray(pts)&&pts.length?pts:['autopista','boquia','tebaida','km25','km18','penon','colseguros']};
+        });
       // Filtrar solo productos que aplican para este punto
       var productosPunto=productos.filter(function(p){
-        return !p.puntos||p.puntos.length===0||p.puntos.indexOf(sesion.punto)!==-1;
+        if(!p.puntos||p.puntos.length===0) return true;
+        return p.puntos.indexOf(sesion.punto)!==-1;
       });
       var turnoKey=sesion.fecha+'_'+sesion.punto+'_'+sesion.turno;
       Promise.all([
@@ -1220,7 +1251,12 @@ function openAdmin(){
   setSyncStatus('sync','⟳ Cargando...');
   sbGet('productos_caja','order=orden.asc,id.asc').then(function(prods){
     productos=prods.filter(function(p){return p.name&&p.name.trim();})
-      .map(function(p){return {id:p.id,name:p.name,precio:p.precio||0};});
+      .map(function(p){
+        var pts=p.puntos;
+        if(typeof pts==='string'){try{pts=JSON.parse(pts);}catch(e){pts=null;}}
+        return {id:p.id,name:p.name,precio:p.precio||0,
+          puntos:Array.isArray(pts)&&pts.length?pts:['autopista','boquia','tebaida','km25','km18','penon','colseguros']};
+      });
     productosBorrar=[];
     renderProdAdmin();
     if(sesion){
@@ -1373,7 +1409,12 @@ function saveAdmin(){
     productosBorrar=[];
     sbGet('productos_caja','order=orden.asc,id.asc').then(function(frescos){
       productos=frescos.filter(function(p){return p.name&&p.name.trim();})
-        .map(function(p){return {id:p.id,name:p.name,precio:p.precio||0};});
+        .map(function(p){
+          var pts=p.puntos;
+          if(typeof pts==='string'){try{pts=JSON.parse(pts);}catch(e){pts=null;}}
+          return {id:p.id,name:p.name,precio:p.precio||0,
+            puntos:Array.isArray(pts)&&pts.length?pts:['autopista','boquia','tebaida','km25','km18','penon','colseguros']};
+        });
       invRows.forEach(function(r){
         var p=productos.find(function(x){return x.id===r.id;});
         if(p){r.precio=p.precio;calcFila(r);}
@@ -1799,33 +1840,41 @@ function initDrag(tr){
 }
 
 function fabAgregarProducto(){
-  var name=prompt('Nombre del nuevo producto:');
-  if(!name||!name.trim()) return;
-  var precioStr=prompt('Precio del producto (solo números):','0');
-  var precio=parseFloat(precioStr)||0;
-  // Preguntar en qué puntos aplica
-  var puntosStr=TODOS_PUNTOS.map(function(p,i){return (i+1)+'. '+p.label;}).join('\n');
-  var selStr=prompt('¿En qué puntos aplica?\nEscribe los números separados por coma.\nDeja vacío para todos.\n\n'+puntosStr,'');
-  var puntos;
-  if(!selStr||!selStr.trim()){
-    puntos=TODOS_PUNTOS.map(function(p){return p.id;});
-  } else {
-    var indices=selStr.split(',').map(function(x){return parseInt(x.trim())-1;});
-    puntos=indices.filter(function(i){return i>=0&&i<TODOS_PUNTOS.length;})
-      .map(function(i){return TODOS_PUNTOS[i].id;});
-    if(!puntos.length) puntos=TODOS_PUNTOS.map(function(p){return p.id;});
-  }
+  document.getElementById('npNombre').value='';
+  document.getElementById('npPrecio').value='';
+  // Renderizar checkboxes de puntos
+  var cont=document.getElementById('npPuntos'); cont.innerHTML='';
+  TODOS_PUNTOS.forEach(function(pt){
+    var lbl=document.createElement('label');
+    lbl.style.cssText='display:flex;align-items:center;gap:4px;font-size:.78rem;cursor:pointer;background:var(--gris1);padding:5px 8px;border-radius:5px;border:1.5px solid var(--gris2);';
+    var chk=document.createElement('input'); chk.type='checkbox'; chk.value=pt.id; chk.checked=true;
+    lbl.appendChild(chk); lbl.appendChild(document.createTextNode(pt.label));
+    cont.appendChild(lbl);
+  });
+  document.getElementById('nuevoProdModal').classList.add('open');
+  setTimeout(function(){document.getElementById('npNombre').focus();},200);
+}
+
+function guardarNuevoProducto(){
+  var name=document.getElementById('npNombre').value.trim();
+  if(!name){alert('Escribe el nombre del producto.');return;}
+  var precio=parseFloat(document.getElementById('npPrecio').value)||0;
+  var puntos=[];
+  document.getElementById('npPuntos').querySelectorAll('input[type=checkbox]').forEach(function(chk){
+    if(chk.checked) puntos.push(chk.value);
+  });
+  if(!puntos.length){alert('Selecciona al menos un punto.');return;}
+  document.getElementById('nuevoProdModal').classList.remove('open');
   var id='vta_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
   setSyncStatus('sync','⟳ Guardando...');
   fetch(SB_URL+'/rest/v1/productos_caja',{
     method:'POST',
     headers:Object.assign({},HEADS,{'Prefer':'resolution=merge-duplicates'}),
-    body:JSON.stringify({id:id,name:name.trim(),precio:precio,puntos:puntos,orden:invRows.length,updated_at:new Date().toISOString()})
+    body:JSON.stringify({id:id,name:name,precio:precio,puntos:puntos,orden:productos.length,updated_at:new Date().toISOString()})
   }).then(function(r){
     if(!r.ok) return r.text().then(function(t){throw new Error(t);});
-    var nuevo={id:id,name:name.trim(),precio:precio,puntos:puntos,ant:0,entrante:null,dev:null,inv_final:null,disponible:0,vendido:0,total_venta:0};
-    productos.push({id:id,name:name.trim(),precio:precio,puntos:puntos});
-    // Solo agregar a invRows si aplica para este punto
+    var nuevo={id:id,name:name,precio:precio,puntos:puntos,ant:0,entrante:null,dev:null,inv_final:null,pedido:null,disponible:0,vendido:0,total_venta:0};
+    productos.push({id:id,name:name,precio:precio,puntos:puntos});
     if(puntos.indexOf(sesion.punto)!==-1) invRows.push(nuevo);
     buildTable();
     setSyncStatus('ok','✓ Producto agregado');
