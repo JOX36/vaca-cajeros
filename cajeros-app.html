@@ -1798,18 +1798,30 @@ function fabAgregarProducto(){
   if(!name||!name.trim()) return;
   var precioStr=prompt('Precio del producto (solo números):','0');
   var precio=parseFloat(precioStr)||0;
+  // Preguntar en qué puntos aplica
+  var puntosStr=TODOS_PUNTOS.map(function(p,i){return (i+1)+'. '+p.label;}).join('\n');
+  var selStr=prompt('¿En qué puntos aplica?\nEscribe los números separados por coma.\nDeja vacío para todos.\n\n'+puntosStr,'');
+  var puntos;
+  if(!selStr||!selStr.trim()){
+    puntos=TODOS_PUNTOS.map(function(p){return p.id;});
+  } else {
+    var indices=selStr.split(',').map(function(x){return parseInt(x.trim())-1;});
+    puntos=indices.filter(function(i){return i>=0&&i<TODOS_PUNTOS.length;})
+      .map(function(i){return TODOS_PUNTOS[i].id;});
+    if(!puntos.length) puntos=TODOS_PUNTOS.map(function(p){return p.id;});
+  }
   var id='vta_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
   setSyncStatus('sync','⟳ Guardando...');
-  var puntosDefault=['autopista','boquia','tebaida','km25','km18','penon','colseguros'];
   fetch(SB_URL+'/rest/v1/productos_caja',{
     method:'POST',
     headers:Object.assign({},HEADS,{'Prefer':'resolution=merge-duplicates'}),
-    body:JSON.stringify({id:id,name:name.trim(),precio:precio,puntos:puntosDefault,orden:invRows.length,updated_at:new Date().toISOString()})
+    body:JSON.stringify({id:id,name:name.trim(),precio:precio,puntos:puntos,orden:invRows.length,updated_at:new Date().toISOString()})
   }).then(function(r){
     if(!r.ok) return r.text().then(function(t){throw new Error(t);});
-    var nuevo={id:id,name:name.trim(),precio:precio,ant:0,entrante:null,dev:null,inv_final:null,disponible:0,vendido:0,total_venta:0};
-    productos.push({id:id,name:name.trim(),precio:precio});
-    invRows.push(nuevo);
+    var nuevo={id:id,name:name.trim(),precio:precio,puntos:puntos,ant:0,entrante:null,dev:null,inv_final:null,disponible:0,vendido:0,total_venta:0};
+    productos.push({id:id,name:name.trim(),precio:precio,puntos:puntos});
+    // Solo agregar a invRows si aplica para este punto
+    if(puntos.indexOf(sesion.punto)!==-1) invRows.push(nuevo);
     buildTable();
     setSyncStatus('ok','✓ Producto agregado');
   }).catch(function(e){setSyncStatus('err','✗ Error');alert('Error: '+e.message);});
