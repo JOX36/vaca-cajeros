@@ -699,6 +699,12 @@ function cargarInventario(){
             entrante:sv?sv.entrante:null,dev:sv?sv.dev:null,inv_final:sv?sv.inv_final:null,pedido:sv?sv.pedido:null,
             disponible:0,vendido:0,total_venta:0};
         });
+        // Limpiar siempre primero para evitar que persistan valores del turno anterior
+        var dEl0=document.getElementById('inDatafono'); if(dEl0) dEl0.value='';
+        var tEl0=document.getElementById('inTransferencia'); if(tEl0) tEl0.value='';
+        gastos=[]; entregas=[]; entregaFinal=false;
+        document.getElementById('inNota').value='';
+        var nsEl0=document.getElementById('inNotaSig'); if(nsEl0) nsEl0.value='';
         if(saved){
           gastos=saved.gastos_list||[];
           entregas=saved.entregas_list||[];
@@ -711,7 +717,7 @@ function cargarInventario(){
             var tEl=document.getElementById('inTransferencia');
             if(dEl){ dEl.value=saved.datafono_val||'';}
             if(tEl){ tEl.value=saved.transferencia_val||'';}
-            recalc(); // Recalcular después de cargar valores de datáfono/transferencia
+            recalc();
           },150);
         }
         // Si el turno ya fue cerrado, bloquearlo
