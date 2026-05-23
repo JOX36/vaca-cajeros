@@ -228,6 +228,7 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
           <th class="th-base col-sep">Entrante</th>
           <th class="th-dev col-sep">Dev.</th>
           <th class="th-disp col-sep">Disponible</th>
+          <th style="background:#c0392b!important;color:white;" class="col-sep">🛵 Rappi</th>
           <th class="th-base col-sep">Inv.Final</th>
           <th style="background:#2a1a3a!important;color:#c8a8f0;" class="col-sep">Pedido</th>
           <th class="th-vend col-sep">Vendido</th>
@@ -271,6 +272,16 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
         </div>
       </div>
       <div class="res-block">
+        <div class="res-block-title">🛵 Rappi</div>
+        <div class="entry-row" style="margin-top:4px;">
+          <span style="font-size:.78rem;color:var(--gris4);flex-shrink:0;">$</span>
+          <input type="number" id="inRappi" min="0" placeholder="0" readonly
+            style="flex:1;padding:7px 10px;border:1.5px solid #c0392b;border-radius:5px;font-family:Inter,sans-serif;font-size:.85rem;background:#fff5f5;text-align:right;color:#c0392b;font-weight:700;"
+            title="Se calcula automáticamente desde las unidades Rappi">
+        </div>
+        <div style="font-size:.68rem;color:var(--gris4);margin-top:3px;">Calculado automáticamente de la tabla</div>
+      </div>
+      <div class="res-block">
         <div class="res-block-title">Entregas de dinero en efectivo <span style="font-size:.62rem;background:#1a1a3a;color:#7a9fd4;padding:1px 6px;border-radius:3px;font-weight:700;">Solo Admin</span></div>
         <div class="entries-list" id="entregasLista"></div>
         <button class="btn-add-entry" id="btnAddEntrega" style="display:none;">＋ Agregar entrega</button>
@@ -283,6 +294,7 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
         <div class="res-row"><span class="label">− Gastos</span><span class="value" id="rGastos">$0</span></div>
         <div class="res-row"><span class="label">− Datáfono</span><span class="value" id="rDatafono">$0</span></div>
         <div class="res-row"><span class="label">− Transferencia</span><span class="value" id="rTransferencia">$0</span></div>
+        <div class="res-row"><span class="label">− Rappi</span><span class="value" id="rRappi" style="color:#c0392b;">$0</span></div>
         <hr class="res-divider">
         <div class="res-row total"><span class="label">💵 Efectivo a entregar</span><span class="value" id="rEfectivo">$0</span></div>
         <hr class="res-divider">
@@ -747,7 +759,7 @@ function cargarInventario(){
             return {id:p.id,name:p.name,precio:p.precio||0,
               ant:sv.ant!==null&&sv.ant!==undefined?sv.ant:0,
               entradas:sv.entradas&&sv.entradas.length?sv.entradas:(sv.entrante?[sv.entrante]:[]),
-              entrante:sv.entrante,dev:sv.dev,inv_final:sv.inv_final,pedido:sv.pedido||null,
+              entrante:sv.entrante,dev:sv.dev,rappi:sv.rappi||null,inv_final:sv.inv_final,pedido:sv.pedido||null,
               disponible:0,vendido:0,total_venta:0};
           });
         } else {
@@ -756,7 +768,7 @@ function cargarInventario(){
             var antVal=invAnt[p.id]!==undefined?invAnt[p.id]:0;
             return {id:p.id,name:p.name,precio:p.precio||0,
               ant:antVal,
-              entradas:[],entrante:null,dev:null,inv_final:null,pedido:null,
+              entradas:[],entrante:null,dev:null,rappi:null,inv_final:null,pedido:null,
               disponible:0,vendido:0,total_venta:0};
           });
         }
@@ -906,6 +918,15 @@ function buildTable(){
     }
     // Disponible (auto)
     var tdD=document.createElement('td'); tdD.className='cell-calc cell-disp'; tdD.id='disp-'+r.id; tdD.textContent=r.disponible||''; tr.appendChild(tdD);
+    // Rappi — cajero puede editar
+    var tdRappi=mkInp(r,'rappi','#c0392b');
+    var inpRappi=tdRappi.querySelector('input');
+    if(inpRappi){
+      inpRappi.style.background='#fff5f5';
+      inpRappi.style.color='#c0392b';
+      if(soloLectura){inpRappi.readOnly=true;inpRappi.style.background='#f0f0f0';}
+    }
+    tr.appendChild(tdRappi);
     // Inv Final
     if(soloLectura){
       var tdFinR=document.createElement('td'); tdFinR.className='cell-locked';
@@ -1070,7 +1091,10 @@ function calcFila(r){
     r.entrante=r.entradas.reduce(function(s,v){return s+v;},0);
   }
   r.disponible=(r.ant||0)+(r.entrante||0)-(r.dev||0);
+  // Rappi se descuenta del disponible junto con inv_final
+  var rappi=r.rappi||0;
   r.vendido=(r.inv_final!==null&&r.inv_final!==undefined)?Math.max(0,r.disponible-(r.inv_final||0)):0;
+  r.rappi_venta=rappi*(r.precio||0);
   r.total_venta=r.vendido*(r.precio||0);
 }
 
@@ -1180,21 +1204,24 @@ function renderAllEntries(){ renderEntries('gastos'); renderEntries('entregas');
 // ── RECALC ───────────────────────────────────────
 function recalc(){
   var tv=invRows.reduce(function(s,r){return s+r.total_venta;},0);
+  var rappiTotal=invRows.reduce(function(s,r){return s+(r.rappi_venta||0);},0);
   var gas=gastos.reduce(function(s,e){return s+(e.valor||0);},0);
   var dat=parseFloat(document.getElementById('inDatafono')?document.getElementById('inDatafono').value:0)||0;
   var tra=parseFloat(document.getElementById('inTransferencia')?document.getElementById('inTransferencia').value:0)||0;
   var ent=entregas.reduce(function(s,e){return s+(e.valor||0);},0);
-  // Efectivo a entregar = ventas - gastos - datáfono - transferencia
-  var ef=tv-gas-dat-tra;
-  // Diferencia = lo que entregó - lo que debía entregar en efectivo
+  // Actualizar campo Rappi (readonly, calculado)
+  var inRappi=document.getElementById('inRappi');
+  if(inRappi) inRappi.value=rappiTotal>0?rappiTotal:'';
+  // Efectivo a entregar descuenta Rappi igual que datáfono/transferencia
+  var ef=tv-gas-dat-tra-rappiTotal;
   var dif=ent-ef;
-  // entregaFinal: si alguna entrega tiene esFinal marcado
   entregaFinal=entregas.some(function(x){return x.esFinal;});
   var mostrar=isAdmin||entregaFinal;
   document.getElementById('rTotalVentas').textContent=mostrar?fmt(tv):'—';
   document.getElementById('rGastos').textContent=fmt(gas);
   document.getElementById('rDatafono').textContent=fmt(dat);
   document.getElementById('rTransferencia').textContent=fmt(tra);
+  document.getElementById('rRappi').textContent=rappiTotal>0?fmt(rappiTotal):'$0';
   document.getElementById('rEfectivo').textContent=mostrar?fmt(ef):'—';
   var rEnt=document.getElementById('rEntregado');
   var rDif=document.getElementById('rDiferencia');
@@ -1206,8 +1233,7 @@ function recalc(){
       else{rDif.textContent='Sobran '+fmt(dif);rDif.className='value val-sobra';}
     } else {
       rDif.textContent='— marcar entrega final para ver resultado';
-      rDif.className='value';
-      rDif.style.fontSize='.72rem';
+      rDif.className='value'; rDif.style.fontSize='.72rem';
     }
   } else {
     rEnt.textContent='—'; rDif.textContent='—'; rDif.className='value';
@@ -1223,7 +1249,7 @@ function guardar(){
   if(window._turnoCerrado){setSyncStatus('ok','✓');return;}
   setSyncStatus('sync','⟳ Guardando...');
   var key=sesion.fecha+'_'+sesion.punto+'_'+sesion.turno;
-  var snap=invRows.map(function(r){return {id:r.id,name:r.name,precio:r.precio,ant:r.ant,entradas:r.entradas||[],entrante:r.entrante,dev:r.dev,inv_final:r.inv_final,pedido:r.pedido,disponible:r.disponible,vendido:r.vendido,total_venta:r.total_venta};});
+  var snap=invRows.map(function(r){return {id:r.id,name:r.name,precio:r.precio,ant:r.ant,entradas:r.entradas||[],entrante:r.entrante,dev:r.dev,rappi:r.rappi,inv_final:r.inv_final,pedido:r.pedido,disponible:r.disponible,vendido:r.vendido,rappi_venta:r.rappi_venta||0,total_venta:r.total_venta};});
   sbUpsert('turnos_caja',{
     turno_key:key,punto:sesion.punto,turno:sesion.turno,fecha:sesion.fecha,cajero:sesion.cajero,cajero_aux:sesion.cajeroAux||'',
     snapshot:snap,
@@ -1505,7 +1531,7 @@ function confirmarCierre(){
   document.getElementById('cierreModal').classList.remove('open');
   setSyncStatus('sync','⟳ Cerrando...');
   var key=sesion.fecha+'_'+sesion.punto+'_'+sesion.turno;
-  var snap=invRows.map(function(r){return {id:r.id,name:r.name,precio:r.precio,ant:r.ant,entradas:r.entradas||[],entrante:r.entrante,dev:r.dev,inv_final:r.inv_final,pedido:r.pedido,disponible:r.disponible,vendido:r.vendido,total_venta:r.total_venta};});
+  var snap=invRows.map(function(r){return {id:r.id,name:r.name,precio:r.precio,ant:r.ant,entradas:r.entradas||[],entrante:r.entrante,dev:r.dev,rappi:r.rappi,inv_final:r.inv_final,pedido:r.pedido,disponible:r.disponible,vendido:r.vendido,rappi_venta:r.rappi_venta||0,total_venta:r.total_venta};});
   sbUpsert('turnos_caja',{
     turno_key:key,punto:sesion.punto,turno:sesion.turno,fecha:sesion.fecha,cajero:sesion.cajero,cajero_aux:sesion.cajeroAux||'',
     snapshot:snap,
@@ -1533,11 +1559,12 @@ function imprimirTurno(){
   var pN={autopista:'Vaca Autopista',boquia:'Vaca Boquia',tebaida:'Vaca Tebaida',km25:'Vaca KM 25',km18:'Vaca KM 18',penon:'Vaca Peñón',colseguros:'Vaca Colseguros'}[sesion.punto];
   var tN=sesion.turno==='manana'?'☀ Mañana':sesion.turno==='tarde'?'🌙 Tarde':'⬛ Completo';
   var tv=invRows.reduce(function(s,r){return s+r.total_venta;},0);
+  var rappiTotal=invRows.reduce(function(s,r){return s+(r.rappi_venta||0);},0);
   var gas=gastos.reduce(function(s,e){return s+(e.valor||0);},0);
   var dat=parseFloat(document.getElementById('inDatafono')?document.getElementById('inDatafono').value:0)||0;
   var tra=parseFloat(document.getElementById('inTransferencia')?document.getElementById('inTransferencia').value:0)||0;
   var ent=entregas.reduce(function(s,e){return s+(e.valor||0);},0);
-  var ef=tv-gas-dat-tra;
+  var ef=tv-gas-dat-tra-rappiTotal;
   var dif=ent-ef;
   var nota=document.getElementById('inNota').value;
   var hora=new Date().toLocaleTimeString('es-CO',{timeZone:'America/Bogota',hour:'2-digit',minute:'2-digit'});
@@ -1548,7 +1575,9 @@ function imprimirTurno(){
   invRows.forEach(function(r){
     filas+='<tr><td style="text-align:left;font-weight:500">'+escH(r.name)+'</td>'
       +'<td>'+fmt(r.precio)+'</td><td>'+(r.ant||'—')+'</td><td>'+(r.entrante||'—')+'</td>'
-      +'<td>'+(r.dev||'—')+'</td><td><b>'+(r.disponible||'—')+'</b></td>'
+      +'<td>'+(r.dev||'—')+'</td>'
+      +'<td style="color:#c0392b;font-weight:700;">'+(r.rappi||'—')+'</td>'
+      +'<td><b>'+(r.disponible||'—')+'</b></td>'
       +'<td>'+(r.inv_final!==null&&r.inv_final!==undefined?r.inv_final:'—')+'</td>'
       +'<td style="background:#f8f0ff;font-weight:700;color:#6a3a8a;">'+(r.pedido||'—')+'</td>'
       +'<td style="font-weight:700;color:#2d6a2d;">'+(r.vendido||'—')+'</td>'
@@ -1584,7 +1613,7 @@ function imprimirTurno(){
     +'<div class="sub"><div><div class="punto">'+pN+' — '+tN+'</div><div style="font-size:7.5pt;color:#555;">'+sesion.fecha+' · '+hora+'</div></div>'
     +'<div class="meta">Cajero: <b>'+escH(sesion.cajero)+'</b>'+(sesion.cajeroAux?'<br>Auxiliar: <b>'+escH(sesion.cajeroAux)+'</b>':'')+'</div></div></div>'
     +'<table><thead><tr><th class="left">Producto</th><th>Precio</th>'
-    +'<th>Ant.</th><th>Entr.</th><th>Dev.</th><th>Disp.</th><th>Final</th><th style="background:#2a1a3a;color:#c8a8f0;">Pedido</th><th>Vendido</th><th>$ Venta</th>'
+    +'<th>Ant.</th><th>Entr.</th><th>Dev.</th><th style="background:#c0392b;color:white;">Rappi</th><th>Disp.</th><th>Final</th><th style="background:#2a1a3a;color:#c8a8f0;">Pedido</th><th>Vendido</th><th>$ Venta</th>'
     +'</tr></thead><tbody>'+filas+'</tbody>'
     +'<tfoot><tr><td class="left" colspan="7">TOTALES</td>'
     +'<td style="font-weight:700;color:#2d6a2d">'+totVend+'</td>'
@@ -1596,7 +1625,7 @@ function imprimirTurno(){
     +'<div class="box"><div class="sec">Entregas efectivo</div>'+listaEntradas(entregas,true)+'<div class="rr" style="border-top:1px solid #ccc;margin-top:4px;padding-top:3px;"><b>Total</b><b>'+fmt(ent)+'</b></div></div>'
     +'</div>'
     +'<div class="rr" style="margin-top:7px;font-size:9pt;"><span>Total ventas</span><b>'+fmt(tv)+'</b></div>'
-    +'<div class="rr" style="font-size:9pt;"><span>− Gastos + Digital</span><b>'+fmt(gas+dat+tra)+'</b></div>'
+    +'<div class="rr" style="font-size:9pt;"><span>− Gastos + Digital + Rappi</span><b>'+fmt(gas+dat+tra+rappiTotal)+'</b></div>'
     +'<div class="rr big"><span>💵 Efectivo a entregar</span><b style="color:#7c4a1e">'+fmt(ef)+'</b></div>'
     +(ent>0?'<div class="rr"><span>Diferencia</span><b style="color:'+difCol+'">'+difTxt+'</b></div>':'')
     +(nota?'<div style="margin-top:5px;font-style:italic;font-size:8pt;color:#666;">📝 '+nota+'</div>':'')
