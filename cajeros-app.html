@@ -733,18 +733,33 @@ function cargarInventario(){
       Promise.all([
         // Turno actual
         sbGet('turnos_caja','punto=eq.'+sesion.punto+'&turno_key=eq.'+turnoKey+'&limit=1').catch(function(){return[];}),
-        // Último turno cerrado del mismo punto en fechas anteriores (cualquier distancia)
+        // Último turno cerrado del mismo punto en fechas ANTERIORES
         sbGet('turnos_caja','punto=eq.'+sesion.punto+'&cerrado=eq.true&fecha=lt.'+sesion.fecha+'&order=fecha.desc,turno.desc&limit=1').catch(function(){return[];}),
-        // Si es tarde: buscar AM del mismo día
-        sesion.turno==='tarde'
+        // Si es tarde o completo: buscar AM del mismo día
+        (sesion.turno==='tarde'||sesion.turno==='completo')
           ? sbGet('turnos_caja','punto=eq.'+sesion.punto+'&turno_key=eq.'+sesion.fecha+'_'+sesion.punto+'_manana&cerrado=eq.true&limit=1').catch(function(){return[];})
+          : Promise.resolve([]),
+        // Si es completo: también buscar tarde del mismo día
+        sesion.turno==='completo'
+          ? sbGet('turnos_caja','punto=eq.'+sesion.punto+'&turno_key=eq.'+sesion.fecha+'_'+sesion.punto+'_tarde&cerrado=eq.true&limit=1').catch(function(){return[];})
           : Promise.resolve([])
       ]).then(function(res){
         var saved   = res[0].length ? res[0][0] : null;
         var antAyer = res[1].length && res[1][0].snapshot && res[1][0].snapshot.length ? res[1][0] : null;
         var antAM   = res[2].length && res[2][0].snapshot && res[2][0].snapshot.length ? res[2][0] : null;
-        // Para turno tarde: priorizar AM de hoy, luego el más reciente anterior
-        var antTurno = (sesion.turno==='tarde' && antAM) ? antAM : antAyer;
+        var antTarde= res[3].length && res[3][0].snapshot && res[3][0].snapshot.length ? res[3][0] : null;
+        // Prioridad para antTurno:
+        // Tarde: AM de hoy > más reciente anterior
+        // Completo: Tarde de hoy > AM de hoy > más reciente anterior
+        // Mañana: más reciente anterior
+        var antTurno;
+        if(sesion.turno==='tarde'){
+          antTurno = antAM || antAyer;
+        } else if(sesion.turno==='completo'){
+          antTurno = antTarde || antAM || antAyer;
+        } else {
+          antTurno = antAyer;
+        }
         var invAnt={};
         if(antTurno&&antTurno.snapshot){
           antTurno.snapshot.forEach(function(p){
