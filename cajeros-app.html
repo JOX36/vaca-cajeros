@@ -2261,7 +2261,10 @@ function abrirDashboard(){
 var turnoEditando = null;
 
 function abrirHistorial(){
-  document.getElementById('histFecha').value = new Date().toISOString().slice(0,10);
+  var hoy=new Date().toLocaleDateString('en-CA',{timeZone:'America/Bogota'});
+  document.getElementById('histFecha').value=hoy;
+  var desdeEl=document.getElementById('histDesde');
+  if(desdeEl) desdeEl.value=hoy;
   document.getElementById('histResultados').innerHTML='';
   document.getElementById('historialModal').classList.add('open');
 }
@@ -2278,38 +2281,128 @@ function buscarHistorial(){
         res.innerHTML='<p style="color:var(--gris4);font-size:.8rem;padding:12px 0;text-align:center;">No hay turnos cerrados para esta fecha.</p>';
         return;
       }
-      var pN={autopista:'Vaca Autopista',boquia:'Vaca Boquia',tebaida:'Vaca Tebaida',km25:'Vaca KM 25',km18:'Vaca KM 18',penon:'Vaca Peñón',colseguros:'Vaca Colseguros'};
+      var pN={autopista:'Autopista',boquia:'Boquia',tebaida:'Tebaida',km25:'KM 25',km18:'KM 18',penon:'Peñón',colseguros:'Colseguros'};
       var tN={manana:'☀ Mañana',tarde:'🌙 Tarde',completo:'⬛ Completo'};
       res.innerHTML='';
+
+      // Agrupar por fecha para mejor visualización
+      var porFecha={};
       turnos.forEach(function(t){
-        var tv=(t.snapshot||[]).reduce(function(s,r){return s+(r.total_venta||0);},0);
-        var ent=(t.entregas_list||[]).reduce(function(s,e){return s+(e.valor||0);},0);
-        var gas=t.gastos||0;
-        var dig=t.digital||0;
-        var ef=tv-gas-dig;
-        var dif=ent-ef;
-        var difTxt=dif===0?'✔ Cuadra':dif<0?'Falta '+fmt(Math.abs(dif)):'Sobran '+fmt(dif);
-        var difCol=dif===0?'#2d6a2d':dif<0?'#b02020':'#7a4a00';
-        var card=document.createElement('div');
-        card.style.cssText='background:var(--gris1);border:1px solid var(--gris2);border-radius:8px;padding:12px;margin-bottom:8px;cursor:pointer;';
-        card.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;">'
-          +'<div>'
-          +'<div style="font-weight:700;font-size:.88rem;">'+(pN[t.punto]||t.punto)+' — '+(tN[t.turno]||t.turno)+'</div>'
-          +'<div style="font-size:.74rem;color:var(--gris4);margin-top:2px;">Cajero: '+escH(t.cajero||'—')+'</div>'
-          +'</div>'
-          +'<div style="text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:4px;">'
-          +'<div style="font-weight:700;color:var(--madera);font-size:.88rem;">'+fmt(tv)+'</div>'
-          +'<div style="font-size:.72rem;font-weight:700;color:'+difCol+';">'+difTxt+'</div>'
-          +'<button onclick="event.stopPropagation();eliminarTurno(\''+t.turno_key+'\',this.closest(\'div[data-card]\'))" '
-          +'style="background:none;border:1px solid #ddd;border-radius:4px;cursor:pointer;font-size:.7rem;color:#aaa;padding:2px 7px;" '
-          +'title="Eliminar turno">🗑 Eliminar</button>'
-          +'</div>'
-          +'</div>';
-        card.dataset.card='1';
-        card.addEventListener('click',(function(turno){return function(){abrirEditarTurno(turno);};})(t));
-        res.appendChild(card);
+        if(!porFecha[t.fecha]) porFecha[t.fecha]=[];
+        porFecha[t.fecha].push(t);
+      });
+
+      Object.keys(porFecha).sort().reverse().forEach(function(fecha){
+        // Encabezado fecha
+        var fechaHdr=document.createElement('div');
+        var parts=fecha.split('-');
+        fechaHdr.style.cssText='font-size:.72rem;font-weight:700;color:var(--gris4);text-transform:uppercase;letter-spacing:.5px;padding:6px 0 4px;border-bottom:1px solid var(--gris2);margin-bottom:6px;';
+        fechaHdr.textContent=parts[2]+'/'+parts[1]+'/'+parts[0];
+        res.appendChild(fechaHdr);
+
+        porFecha[fecha].forEach(function(t){
+          var tv=(t.snapshot||[]).reduce(function(s,r){return s+(r.total_venta||0);},0);
+          var rap=(t.snapshot||[]).reduce(function(s,r){return s+(r.rappi_venta||0);},0);
+          var gas=t.gastos||0;
+          var dat=t.datafono_val||0; var tra=t.transferencia_val||0;
+          var ef=tv-gas-dat-tra-rap;
+          var ent=(t.entregas_list||[]).reduce(function(s,e){return s+(e.valor||0);},0);
+          var dif=ent-ef;
+          var difTxt=dif===0?'✔ Cuadra':dif<0?'Falta '+fmt(Math.abs(dif)):'Sobran '+fmt(dif);
+          var difCol=dif===0?'#2d6a2d':dif<0?'#b02020':'#e65c00';
+
+          var card=document.createElement('div');
+          card.style.cssText='background:var(--gris1);border:1px solid var(--gris2);border-radius:8px;padding:10px 12px;margin-bottom:8px;';
+          card.dataset.card='1';
+
+          card.innerHTML=
+            '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">'
+            +'<div>'
+            +'<div style="font-weight:700;font-size:.86rem;">'+(pN[t.punto]||t.punto)+' — '+(tN[t.turno]||t.turno)+'</div>'
+            +'<div style="font-size:.72rem;color:var(--gris4);margin-top:2px;">👤 '+escH(t.cajero||'—')+(t.cajero_aux?' & '+escH(t.cajero_aux):'')+'</div>'
+            +'</div>'
+            +'<div style="text-align:right;">'
+            +'<div style="font-weight:700;color:var(--madera);font-size:.86rem;">'+fmt(tv)+'</div>'
+            +'<div style="font-size:.72rem;font-weight:700;color:'+difCol+';">'+difTxt+'</div>'
+            +'</div>'
+            +'</div>'
+            +'<div style="display:flex;gap:6px;">'
+            +'<button class="btn" style="flex:2;padding:5px;font-size:.72rem;background:#1a3a1a;color:#7dbb7d;" onclick="(function(){abrirEditarTurno('+JSON.stringify(t).replace(/"/g,"&quot;")+')})()">'
+            +'✏ Editar / Ver</button>'
+            +'<button class="btn" style="flex:1;padding:5px;font-size:.72rem;background:#1a3a1a;color:#5dff5d;" onclick="exportarTurnoExcel(\''+t.turno_key+'\')">'
+            +'📥 Excel</button>'
+            +'<button style="background:none;border:1px solid #ddd;border-radius:5px;cursor:pointer;font-size:.7rem;color:#aaa;padding:5px 8px;" '
+            +'onclick="eliminarTurno(\''+t.turno_key+'\',this.closest(\'div[data-card]\'))">'
+            +'🗑</button>'
+            +'</div>';
+
+          res.appendChild(card);
+        });
       });
     }).catch(function(e){res.innerHTML='<p style="color:var(--rojo);font-size:.8rem;">Error: '+e.message+'</p>';});
+}
+
+function exportarTurnoExcel(turnoKey){
+  setSyncStatus('sync','⟳ Generando Excel...');
+  sbGet('turnos_caja','turno_key=eq.'+turnoKey+'&limit=1')
+    .then(function(res){
+      if(!res.length){alert('No se encontró el turno.');return;}
+      var t=res[0];
+      var pN={autopista:'Autopista',boquia:'Boquia',tebaida:'Tebaida',km25:'KM 25',km18:'KM 18',penon:'Peñón',colseguros:'Colseguros'};
+      var tN={manana:'Mañana',tarde:'Tarde',completo:'Completo'};
+      cargarSheetJS(function(){
+        var wb=XLSX.utils.book_new();
+        // Hoja inventario
+        var invRows=[['Producto','Precio','Ant','Entrante','Dev','Rappi','Disponible','Inv.Final','Vendido','$ Venta']];
+        (t.snapshot||[]).forEach(function(r){
+          invRows.push([r.name,fmt2(r.precio),fmt2(r.ant),fmt2(r.entrante),fmt2(r.dev),fmt2(r.rappi),fmt2(r.disponible),r.inv_final!==null?fmt2(r.inv_final):'',fmt2(r.vendido),fmt2(r.total_venta)]);
+        });
+        var tv=(t.snapshot||[]).reduce(function(s,r){return s+(r.total_venta||0);},0);
+        var rap=(t.snapshot||[]).reduce(function(s,r){return s+(r.rappi_venta||0);},0);
+        var gas=t.gastos||0; var dat=t.datafono_val||0; var tra=t.transferencia_val||0;
+        var ef=tv-gas-dat-tra-rap; var ent=t.entregado||0; var dif=ent-ef;
+        invRows.push([]);
+        invRows.push(['TOTALES','','','','','','','','',fmt2(tv)]);
+        var wsInv=XLSX.utils.aoa_to_sheet(invRows);
+        wsInv['!cols']=[{wch:20},{wch:10},{wch:8},{wch:8},{wch:8},{wch:8},{wch:10},{wch:10},{wch:10},{wch:12}];
+        XLSX.utils.book_append_sheet(wb,wsInv,'Inventario');
+        // Hoja resumen
+        var resRows=[
+          ['Turno',(pN[t.punto]||t.punto)+' — '+(tN[t.turno]||t.turno)],
+          ['Fecha',t.fecha],
+          ['Cajero',t.cajero||''],
+          ['Auxiliar',t.cajero_aux||''],
+          [''],
+          ['Total Ventas',fmt2(tv)],
+          ['Gastos',fmt2(gas)],
+          ['Datáfono',fmt2(dat)],
+          ['Transferencia',fmt2(tra)],
+          ['Rappi',fmt2(rap)],
+          ['Efectivo a Entregar',fmt2(ef)],
+          ['Total Entregado',fmt2(ent)],
+          ['Diferencia',fmt2(dif)],
+          [''],
+          ['Observaciones',t.nota||'']
+        ];
+        // Gastos detalle
+        if(t.gastos_list&&t.gastos_list.length){
+          resRows.push(['']);
+          resRows.push(['GASTOS','']);
+          t.gastos_list.forEach(function(g){resRows.push([g.desc||'',fmt2(g.valor)]);});
+        }
+        // Entregas detalle
+        if(t.entregas_list&&t.entregas_list.length){
+          resRows.push(['']);
+          resRows.push(['ENTREGAS EFECTIVO','']);
+          t.entregas_list.forEach(function(e){resRows.push([(e.desc||'')+(e.hora?' ('+e.hora+')':''),fmt2(e.valor)]);});
+        }
+        var wsRes=XLSX.utils.aoa_to_sheet(resRows);
+        wsRes['!cols']=[{wch:20},{wch:20}];
+        XLSX.utils.book_append_sheet(wb,wsRes,'Resumen');
+        XLSX.writeFile(wb,'Turno_'+(pN[t.punto]||t.punto)+'_'+t.fecha+'_'+(tN[t.turno]||t.turno)+'.xlsx');
+        setSyncStatus('ok','✓ Excel descargado');
+      });
+    }).catch(function(e){setSyncStatus('err','✗ Error');alert('Error: '+e.message);});
 }
 
 function calcEditTotales(){
