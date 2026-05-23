@@ -324,6 +324,7 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
     <button class="btn btn-admin" id="btnAdminApp" style="flex-shrink:0;">⚙ Admin</button>
     <button class="btn" style="background:#1a2a3a;color:#7ab0e0;display:none;flex-shrink:0;" id="btnDashboard">📊 Dashboard</button>
     <button class="btn" style="background:#1a3a2a;color:#7dbb9d;display:none;flex-shrink:0;" id="btnHistorial">📋 Historial</button>
+    <button class="btn" style="background:#0a2a0a;color:#5dff5d;display:none;flex-shrink:0;" id="btnResumen">📊 Mensual</button>
     <button class="btn" style="background:#2a1a0a;color:#c8a050;display:none;flex-shrink:0;" id="btnPapelera">🗑 Papelera</button>
     <button class="btn" style="background:#3a0a0a;color:#e88;display:none;flex-shrink:0;" id="btnFaltantes">⚠ Faltantes</button>
     <button class="btn btn-imprimir" id="btnImprimir" style="flex-shrink:0;">🖨 Imprimir</button>
@@ -364,6 +365,35 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
   </div>
 </div>
 
+<!-- MODAL RESUMEN MENSUAL -->
+<div class="overlay" id="resumenModal">
+  <div class="modal" style="max-width:540px;">
+    <button class="modal-x" onclick="document.getElementById('resumenModal').classList.remove('open')">✕</button>
+    <div class="modal-title">📊 Resumen Mensual</div>
+    <div class="modal-sub">Totales por punto — exporta a Excel</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+      <div>
+        <label style="font-size:.72rem;font-weight:600;display:block;margin-bottom:4px;">Mes</label>
+        <select id="resMes" style="width:100%;padding:8px 10px;border:1.5px solid var(--gris2);border-radius:6px;font-family:'Inter',sans-serif;font-size:.83rem;background:var(--gris1);">
+          <option value="1">Enero</option><option value="2">Febrero</option>
+          <option value="3">Marzo</option><option value="4">Abril</option>
+          <option value="5">Mayo</option><option value="6">Junio</option>
+          <option value="7">Julio</option><option value="8">Agosto</option>
+          <option value="9">Septiembre</option><option value="10">Octubre</option>
+          <option value="11">Noviembre</option><option value="12">Diciembre</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:.72rem;font-weight:600;display:block;margin-bottom:4px;">Año</label>
+        <input type="number" id="resAnio" value="2026" min="2024" max="2030"
+          style="width:100%;padding:8px 10px;border:1.5px solid var(--gris2);border-radius:6px;font-family:'Inter',sans-serif;font-size:.83rem;background:var(--gris1);">
+      </div>
+    </div>
+    <button class="btn btn-cerrar" onclick="exportarResumenMensual()" style="width:100%;margin-bottom:10px;">📥 Generar y descargar Excel</button>
+    <div id="resumenStatus" style="text-align:center;font-size:.78rem;color:var(--gris4);"></div>
+  </div>
+</div>
+
 <!-- MODAL FALTANTES -->
 <div class="overlay" id="faltantesModal">
   <div class="modal" style="max-width:560px;">
@@ -395,12 +425,19 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
     <button class="modal-x" id="histX">✕</button>
     <div class="modal-title">📋 Historial de Turnos</div>
     <div class="modal-sub">Solo turnos cerrados — acceso admin</div>
-    <div style="display:flex;gap:8px;margin-bottom:14px;align-items:flex-end;">
-      <div style="flex:1;">
-        <label style="font-size:.72rem;font-weight:600;display:block;margin-bottom:4px;">Fecha</label>
-        <input type="date" id="histFecha" style="width:100%;padding:8px 10px;border:1.5px solid var(--gris2);border-radius:6px;font-family:'Inter',sans-serif;font-size:.85rem;background:var(--gris1);">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+      <div>
+        <label style="font-size:.72rem;font-weight:600;display:block;margin-bottom:4px;">Desde</label>
+        <input type="date" id="histDesde" style="width:100%;padding:8px 10px;border:1.5px solid var(--gris2);border-radius:6px;font-family:'Inter',sans-serif;font-size:.83rem;background:var(--gris1);">
       </div>
-      <button class="btn btn-cerrar" onclick="buscarHistorial()" style="flex-shrink:0;padding:8px 14px;">🔍 Buscar</button>
+      <div>
+        <label style="font-size:.72rem;font-weight:600;display:block;margin-bottom:4px;">Hasta</label>
+        <input type="date" id="histFecha" style="width:100%;padding:8px 10px;border:1.5px solid var(--gris2);border-radius:6px;font-family:'Inter',sans-serif;font-size:.83rem;background:var(--gris1);">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <button class="btn btn-cerrar" onclick="buscarHistorial()" style="flex:2;padding:8px;">🔍 Buscar</button>
+      <button class="btn" onclick="exportarDetalleExcel()" style="flex:1;padding:8px;background:#1a6a1a;color:#7dff7d;">📥 Excel</button>
     </div>
     <div id="histResultados"></div>
   </div>
@@ -571,6 +608,15 @@ document.getElementById('btnAddProd').addEventListener('click', addProdAdmin);
 document.getElementById('btnCerrar').addEventListener('click', abrirCierre);
 document.getElementById('btnImprimir').addEventListener('click', imprimirTurno);
 document.getElementById('btnDashboard').addEventListener('click', abrirDashboard);
+document.getElementById('btnResumen').addEventListener('click', function(){
+  var hoy=new Date().toLocaleDateString('en-CA',{timeZone:'America/Bogota'});
+  var mes=parseInt(hoy.split('-')[1]);
+  var anio=parseInt(hoy.split('-')[0]);
+  document.getElementById('resMes').value=mes;
+  document.getElementById('resAnio').value=anio;
+  document.getElementById('resumenStatus').textContent='';
+  document.getElementById('resumenModal').classList.add('open');
+});
 document.getElementById('btnHistorial').addEventListener('click', abrirHistorial);
 document.getElementById('btnPapelera').addEventListener('click', abrirPapelera);
 document.getElementById('btnFaltantes').addEventListener('click', abrirFaltantes);
@@ -622,6 +668,8 @@ function showAdminUI(){
   if(fab) fab.style.display='flex';
   var btnDB=document.getElementById('btnDashboard');
   if(btnDB) btnDB.style.display='flex';
+  var btnRes=document.getElementById('btnResumen');
+  if(btnRes) btnRes.style.display='flex';
   var btnEC=document.getElementById('btnEditCajero');
   if(btnEC) btnEC.style.display='inline-flex';
   renderEntries('entregas');
@@ -648,6 +696,8 @@ function showAdminUI(){
       if(bPape) bPape.style.display='none';
       var bDB=document.getElementById('btnDashboard');
       if(bDB) bDB.style.display='none';
+      var bRes=document.getElementById('btnResumen');
+      if(bRes) bRes.style.display='none';
       var bEC=document.getElementById('btnEditCajero');
       if(bEC) bEC.style.display='none';
       var bE=document.getElementById('btnAddEntrega');
@@ -706,6 +756,7 @@ function salir(){
   var bPape=document.getElementById('btnPapelera'); if(bPape) bPape.style.display='none';
   var bFalt=document.getElementById('btnFaltantes'); if(bFalt) bFalt.style.display='none';
   var bDB=document.getElementById('btnDashboard'); if(bDB) bDB.style.display='none';
+  var bRes=document.getElementById('btnResumen'); if(bRes) bRes.style.display='none';
   var bEC=document.getElementById('btnEditCajero'); if(bEC) bEC.style.display='none';
   document.getElementById('loginScreen').style.display='flex';
   document.getElementById('appScreen').style.display='none';
@@ -2030,6 +2081,115 @@ function doReorder(srcId,tgtId){
      .catch(function(){setSyncStatus('err','✗ Error al guardar orden');});
 }
 
+// ── EXCEL ─────────────────────────────────────────
+function cargarSheetJS(cb){
+  if(window.XLSX){cb();return;}
+  var s=document.createElement('script');
+  s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+  s.onload=cb; document.head.appendChild(s);
+}
+function fmt2(n){return Number(n||0);}
+
+function exportarDetalleExcel(){
+  var hasta=document.getElementById('histFecha').value;
+  var desde=document.getElementById('histDesde')?document.getElementById('histDesde').value||hasta:hasta;
+  if(!hasta){alert('Selecciona un rango de fechas en el historial.');return;}
+  var pN={autopista:'Autopista',boquia:'Boquia',tebaida:'Tebaida',km25:'KM 25',km18:'KM 18',penon:'Peñón',colseguros:'Colseguros'};
+  var tN={manana:'Mañana',tarde:'Tarde',completo:'Completo'};
+  setSyncStatus('sync','⟳ Generando Excel...');
+  sbGet('turnos_caja','fecha=gte.'+desde+'&fecha=lte.'+hasta+'&cerrado=eq.true&eliminado=eq.false&order=fecha.asc,punto.asc,turno.asc')
+    .then(function(turnos){
+      cargarSheetJS(function(){
+        var rows=[['Fecha','Punto','Turno','Cajero','Auxiliar','Total Ventas','Gastos','Datáfono','Transferencia','Rappi','Efectivo a Entregar','Total Entregado','Diferencia','Observaciones']];
+        turnos.forEach(function(t){
+          var tv=(t.snapshot||[]).reduce(function(s,r){return s+(r.total_venta||0);},0);
+          var rap=(t.snapshot||[]).reduce(function(s,r){return s+(r.rappi_venta||0);},0);
+          var gas=t.gastos||0; var dat=t.datafono_val||0; var tra=t.transferencia_val||0;
+          var ef=tv-gas-dat-tra-rap; var ent=t.entregado||0; var dif=ent-ef;
+          rows.push([t.fecha,pN[t.punto]||t.punto,tN[t.turno]||t.turno,t.cajero||'',t.cajero_aux||'',
+            fmt2(tv),fmt2(gas),fmt2(dat),fmt2(tra),fmt2(rap),fmt2(ef),fmt2(ent),fmt2(dif),t.nota||'']);
+        });
+        var wb=XLSX.utils.book_new();
+        var ws=XLSX.utils.aoa_to_sheet(rows);
+        ws['!cols']=[{wch:12},{wch:14},{wch:10},{wch:18},{wch:18},{wch:14},{wch:12},{wch:12},{wch:14},{wch:12},{wch:18},{wch:16},{wch:12},{wch:30}];
+        XLSX.utils.book_append_sheet(wb,ws,'Detalle Turnos');
+        XLSX.writeFile(wb,'LaVaca_Detalle_'+desde+'_'+hasta+'.xlsx');
+        setSyncStatus('ok','✓ Excel descargado');
+      });
+    }).catch(function(e){setSyncStatus('err','✗ Error');alert('Error: '+e.message);});
+}
+
+function exportarResumenMensual(){
+  var mes=parseInt(document.getElementById('resMes').value);
+  var anio=parseInt(document.getElementById('resAnio').value);
+  var mesStr=String(mes).padStart(2,'0');
+  var desde=anio+'-'+mesStr+'-01';
+  var ultimoDia=new Date(anio,mes,0).getDate();
+  var hasta=anio+'-'+mesStr+'-'+String(ultimoDia).padStart(2,'0');
+  var meses=['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  var pN={autopista:'Autopista',boquia:'Boquia',tebaida:'Tebaida',km25:'KM 25',km18:'KM 18',penon:'Peñón',colseguros:'Colseguros'};
+  var tN={manana:'Mañana',tarde:'Tarde',completo:'Completo'};
+  var status=document.getElementById('resumenStatus');
+  status.textContent='⟳ Cargando datos...';
+  setSyncStatus('sync','⟳ Generando resumen...');
+  sbGet('turnos_caja','fecha=gte.'+desde+'&fecha=lte.'+hasta+'&cerrado=eq.true&eliminado=eq.false&order=fecha.asc,punto.asc,turno.asc')
+    .then(function(turnos){
+      cargarSheetJS(function(){
+        var wb=XLSX.utils.book_new();
+        var puntos=Object.keys(pN);
+        // Hoja resumen general
+        var resRows=[['Resumen '+meses[mes]+' '+anio,'','','','','','','','',''],
+          ['Punto','Días activos','Total Ventas','Gastos','Datáfono','Transferencia','Rappi','Total Entregado','Faltantes','Sobrantes']];
+        var totGen={tv:0,gas:0,dat:0,tra:0,rap:0,ent:0,falt:0,sobr:0};
+        puntos.forEach(function(punto){
+          var tp=turnos.filter(function(t){return t.punto===punto;});
+          if(!tp.length) return;
+          var tv=0,gas=0,dat=0,tra=0,rap=0,ent=0,falt=0,sobr=0; var dias=new Set();
+          tp.forEach(function(t){
+            var ttv=(t.snapshot||[]).reduce(function(s,r){return s+(r.total_venta||0);},0);
+            var trag=(t.snapshot||[]).reduce(function(s,r){return s+(r.rappi_venta||0);},0);
+            var tgas=t.gastos||0; var tdat=t.datafono_val||0; var ttra=t.transferencia_val||0;
+            var ef=ttv-tgas-tdat-ttra-trag; var tent=t.entregado||0; var dif=tent-ef;
+            tv+=ttv;gas+=tgas;dat+=tdat;tra+=ttra;rap+=trag;ent+=tent;
+            if(dif<0)falt+=Math.abs(dif);else if(dif>0)sobr+=dif;
+            dias.add(t.fecha);
+          });
+          resRows.push([pN[punto],dias.size,fmt2(tv),fmt2(gas),fmt2(dat),fmt2(tra),fmt2(rap),fmt2(ent),fmt2(falt),fmt2(sobr)]);
+          totGen.tv+=tv;totGen.gas+=gas;totGen.dat+=dat;totGen.tra+=tra;totGen.rap+=rap;totGen.ent+=ent;totGen.falt+=falt;totGen.sobr+=sobr;
+        });
+        resRows.push(['TOTALES','',fmt2(totGen.tv),fmt2(totGen.gas),fmt2(totGen.dat),fmt2(totGen.tra),fmt2(totGen.rap),fmt2(totGen.ent),fmt2(totGen.falt),fmt2(totGen.sobr)]);
+        var wsRes=XLSX.utils.aoa_to_sheet(resRows);
+        wsRes['!cols']=[{wch:14},{wch:12},{wch:14},{wch:12},{wch:12},{wch:14},{wch:12},{wch:16},{wch:12},{wch:12}];
+        XLSX.utils.book_append_sheet(wb,wsRes,'Resumen General');
+        // Hoja por punto
+        puntos.forEach(function(punto){
+          var tp=turnos.filter(function(t){return t.punto===punto;});
+          if(!tp.length) return;
+          var rows=[['Detalle '+pN[punto]+' — '+meses[mes]+' '+anio],
+            ['Fecha','Turno','Cajero','Auxiliar','Ventas','Gastos','Datáfono','Transferencia','Rappi','Ef.Entregar','Entregado','Diferencia','Observaciones']];
+          var tot={tv:0,gas:0,dat:0,tra:0,rap:0,ent:0,falt:0,sobr:0};
+          tp.forEach(function(t){
+            var tv=(t.snapshot||[]).reduce(function(s,r){return s+(r.total_venta||0);},0);
+            var rap=(t.snapshot||[]).reduce(function(s,r){return s+(r.rappi_venta||0);},0);
+            var gas=t.gastos||0; var dat=t.datafono_val||0; var tra=t.transferencia_val||0;
+            var ef=tv-gas-dat-tra-rap; var ent=t.entregado||0; var dif=ent-ef;
+            tot.tv+=tv;tot.gas+=gas;tot.dat+=dat;tot.tra+=tra;tot.rap+=rap;tot.ent+=ent;
+            if(dif<0)tot.falt+=Math.abs(dif);else if(dif>0)tot.sobr+=dif;
+            rows.push([t.fecha,tN[t.turno]||t.turno,t.cajero||'',t.cajero_aux||'',
+              fmt2(tv),fmt2(gas),fmt2(dat),fmt2(tra),fmt2(rap),fmt2(ef),fmt2(ent),fmt2(dif),t.nota||'']);
+          });
+          rows.push(['TOTALES','','','',fmt2(tot.tv),fmt2(tot.gas),fmt2(tot.dat),fmt2(tot.tra),fmt2(tot.rap),'',fmt2(tot.ent),fmt2(tot.falt>0?-tot.falt:tot.sobr),'']);
+          var ws=XLSX.utils.aoa_to_sheet(rows);
+          ws['!cols']=[{wch:12},{wch:10},{wch:16},{wch:16},{wch:14},{wch:12},{wch:12},{wch:14},{wch:12},{wch:14},{wch:12},{wch:12},{wch:30}];
+          XLSX.utils.book_append_sheet(wb,ws,pN[punto]);
+        });
+        XLSX.writeFile(wb,'LaVaca_Resumen_'+meses[mes]+'_'+anio+'.xlsx');
+        status.textContent='✅ Descargado: LaVaca_Resumen_'+meses[mes]+'_'+anio+'.xlsx';
+        setSyncStatus('ok','✓ Excel generado');
+      });
+    }).catch(function(e){status.textContent='❌ Error: '+e.message;setSyncStatus('err','✗ Error');});
+}
+
 // ── DASHBOARD ────────────────────────────────────
 function abrirDashboard(){
   var hoy=new Date().toLocaleDateString('en-CA',{timeZone:'America/Bogota'});
@@ -2107,11 +2267,12 @@ function abrirHistorial(){
 }
 
 function buscarHistorial(){
-  var fecha = document.getElementById('histFecha').value;
-  if(!fecha){alert('Selecciona una fecha.');return;}
-  var res = document.getElementById('histResultados');
+  var hasta=document.getElementById('histFecha').value;
+  var desde=document.getElementById('histDesde')?document.getElementById('histDesde').value||hasta:hasta;
+  if(!hasta){alert('Selecciona una fecha.');return;}
+  var res=document.getElementById('histResultados');
   res.innerHTML='<p style="color:var(--gris4);font-size:.8rem;">Buscando...</p>';
-  sbGet('turnos_caja','fecha=eq.'+fecha+'&cerrado=eq.true&eliminado=eq.false&order=punto.asc,turno.asc')
+  sbGet('turnos_caja','fecha=gte.'+desde+'&fecha=lte.'+hasta+'&cerrado=eq.true&eliminado=eq.false&order=fecha.desc,punto.asc,turno.asc')
     .then(function(turnos){
       if(!turnos.length){
         res.innerHTML='<p style="color:var(--gris4);font-size:.8rem;padding:12px 0;text-align:center;">No hay turnos cerrados para esta fecha.</p>';
