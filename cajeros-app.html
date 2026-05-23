@@ -756,8 +756,16 @@ function cargarInventario(){
         if(saved && saved.snapshot && saved.snapshot.length){
           invRows=saved.snapshot.map(function(sv){
             var p=productos.find(function(x){return x.id===sv.id;})||{id:sv.id,name:sv.name,precio:sv.precio||0};
+            // Opción B: si el turno NO está cerrado, siempre tomar ant del turno anterior
+            // Así las correcciones del historial se reflejan automáticamente
+            var antVal;
+            if(!saved.cerrado && invAnt[sv.id]!==undefined){
+              antVal=invAnt[sv.id]; // Turno abierto: usar ant actualizado del anterior
+            } else {
+              antVal=sv.ant!==null&&sv.ant!==undefined?sv.ant:0; // Turno cerrado: respetar snapshot
+            }
             return {id:p.id,name:p.name,precio:p.precio||0,
-              ant:sv.ant!==null&&sv.ant!==undefined?sv.ant:0,
+              ant:antVal,
               entradas:sv.entradas&&sv.entradas.length?sv.entradas:(sv.entrante?[sv.entrante]:[]),
               entrante:sv.entrante,dev:sv.dev,rappi:sv.rappi||null,inv_final:sv.inv_final,pedido:sv.pedido||null,
               disponible:0,vendido:0,total_venta:0};
