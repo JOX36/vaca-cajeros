@@ -1034,15 +1034,23 @@ function buildTable(){
     }
     tr.appendChild(tdFin);
     } // fin else soloLectura inv_final
-    // Pedido para siguiente turno
+    // Pedido para siguiente turno — semáforo según inv_final
+    var _invF=r.inv_final;
+    var _semColor,_semBg,_semBorder;
+    if(_invF===null||_invF===undefined){_semColor='#6a3a8a';_semBg='#f8f0ff';_semBorder='#6a3a8a';}
+    else if(_invF<5){_semColor='#7a0000';_semBg='#ffe0e0';_semBorder='#c0392b';}
+    else if(_invF<10){_semColor='#7a5000';_semBg='#fff8e0';_semBorder='#e6a817';}
+    else{_semColor='#1a4a1a';_semBg='#e8f5e8';_semBorder='#2d8a2d';}
     if(soloLectura){
-      var tdPedR=document.createElement('td'); tdPedR.className='cell-locked';
+      var tdPedR=document.createElement('td');
+      tdPedR.style.cssText='background:'+_semBg+';color:'+_semColor+';font-weight:700;text-align:center;font-size:.78rem;';
       tdPedR.textContent=r.pedido||'—'; tr.appendChild(tdPedR);
     } else {
       var tdPed=document.createElement('td'); tdPed.style.cssText='padding:2px 4px;';
       var inPed=document.createElement('input'); inPed.type='number'; inPed.min='0'; inPed.placeholder='—';
       inPed.value=(r.pedido!==null&&r.pedido!==undefined)?r.pedido:'';
-      inPed.style.cssText='font-family:Inter,sans-serif;font-size:.78rem;width:50px;padding:3px 5px;border:1.5px solid #6a3a8a;border-radius:4px;background:#f8f0ff;text-align:center;';
+      inPed.setAttribute('data-ped',r.id);
+      inPed.style.cssText='font-family:Inter,sans-serif;font-size:.78rem;width:50px;padding:3px 5px;border:1.5px solid '+_semBorder+';border-radius:4px;background:'+_semBg+';color:'+_semColor+';text-align:center;font-weight:700;';
       inPed.title='Pedido para el siguiente turno';
       inPed.addEventListener('input',(function(row){return function(){
         row.pedido=this.value===''?null:parseFloat(this.value);
@@ -1176,6 +1184,14 @@ function updateFila(r){
   var d=document.getElementById('disp-'+r.id); if(d) d.textContent=r.disponible>0?r.disponible:'';
   var v=document.getElementById('vend-'+r.id); if(v) v.textContent=r.vendido>0?r.vendido:'';
   var m=document.getElementById('money-'+r.id); if(m) m.textContent=r.total_venta>0?fmt(r.total_venta):'';
+  var _invF=r.inv_final;
+  var _semColor,_semBg,_semBorder;
+  if(_invF===null||_invF===undefined){_semColor='#6a3a8a';_semBg='#f8f0ff';_semBorder='#6a3a8a';}
+  else if(_invF<5){_semColor='#7a0000';_semBg='#ffe0e0';_semBorder='#c0392b';}
+  else if(_invF<10){_semColor='#7a5000';_semBg='#fff8e0';_semBorder='#e6a817';}
+  else{_semColor='#1a4a1a';_semBg='#e8f5e8';_semBorder='#2d8a2d';}
+  var pedInput=document.querySelector('input[data-ped="'+r.id+'"]');
+  if(pedInput){pedInput.style.background=_semBg;pedInput.style.borderColor=_semBorder;pedInput.style.color=_semColor;}
   updateTotales(); recalc();
 }
 
@@ -1794,9 +1810,13 @@ function buscarFaltantes(){
 
   sbGet('turnos_caja','fecha=gte.'+desde+'&fecha=lte.'+hasta+'&cerrado=eq.true&eliminado=eq.false&order=cajero.asc,fecha.asc')
     .then(function(turnos){
-      // Filtrar por cajero si se especificó
+      // Filtrar por cajero si se especificó — buscar en principal Y auxiliar
       if(cajeroFiltro){
-        turnos=turnos.filter(function(t){return (t.cajero||'').toLowerCase().includes(cajeroFiltro);});
+        turnos=turnos.filter(function(t){
+          var enPrincipal=(t.cajero||'').toLowerCase().includes(cajeroFiltro);
+          var enAux=(t.cajero_aux||'').toLowerCase().includes(cajeroFiltro);
+          return enPrincipal || enAux;
+        });
       }
       // Calcular faltante de cada turno y expandir por cajeros
       var conFaltante=[];
