@@ -272,6 +272,15 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
         </div>
       </div>
       <div class="res-block">
+        <div class="res-block-title">🏷 Descuentos</div>
+        <div class="entry-row" style="margin-top:4px;">
+          <span style="font-size:.78rem;color:var(--gris4);flex-shrink:0;">$</span>
+          <input type="number" id="inDescuentos" min="0" placeholder="0"
+            style="flex:1;padding:7px 10px;border:1.5px solid var(--gris2);border-radius:5px;font-family:Inter,sans-serif;font-size:.85rem;background:var(--gris1);text-align:right;"
+            oninput="recalc();autoSave();">
+        </div>
+      </div>
+      <div class="res-block">
         <div class="res-block-title">🛵 Rappi</div>
         <div class="entry-row" style="margin-top:4px;">
           <span style="font-size:.78rem;color:var(--gris4);flex-shrink:0;">$</span>
@@ -294,6 +303,7 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
         <div class="res-row"><span class="label">− Gastos</span><span class="value" id="rGastos">$0</span></div>
         <div class="res-row"><span class="label">− Datáfono</span><span class="value" id="rDatafono">$0</span></div>
         <div class="res-row"><span class="label">− Transferencia</span><span class="value" id="rTransferencia">$0</span></div>
+        <div class="res-row"><span class="label">− Descuentos</span><span class="value" id="rDescuentos">$0</span></div>
         <div class="res-row"><span class="label">− Rappi</span><span class="value" id="rRappi" style="color:#c0392b;">$0</span></div>
         <hr class="res-divider">
         <div class="res-row total"><span class="label">💵 Efectivo a entregar</span><span class="value" id="rEfectivo">$0</span></div>
@@ -859,6 +869,7 @@ function cargarInventario(){
         // Limpiar siempre primero para evitar que persistan valores del turno anterior
         var dEl0=document.getElementById('inDatafono'); if(dEl0) dEl0.value='';
         var tEl0=document.getElementById('inTransferencia'); if(tEl0) tEl0.value='';
+        var descEl0=document.getElementById('inDescuentos'); if(descEl0) descEl0.value='';
         gastos=[]; entregas=[]; entregaFinal=false;
         document.getElementById('inNota').value='';
         var nsEl0=document.getElementById('inNotaSig'); if(nsEl0) nsEl0.value='';
@@ -873,6 +884,7 @@ function cargarInventario(){
             var tEl=document.getElementById('inTransferencia');
             if(dEl){ dEl.value=saved.datafono_val||'';}
             if(tEl){ tEl.value=saved.transferencia_val||'';}
+            var descEl=document.getElementById('inDescuentos'); if(descEl){ descEl.value=saved.descuentos_val||'';}
             recalc();
           },150);
         }
@@ -884,6 +896,7 @@ function cargarInventario(){
           // Bloquear campos de resumen
           var inDat=document.getElementById('inDatafono'); if(inDat){inDat.readOnly=true;inDat.style.background='#f0f0f0';}
           var inTra=document.getElementById('inTransferencia'); if(inTra){inTra.readOnly=true;inTra.style.background='#f0f0f0';}
+          var inDesc=document.getElementById('inDescuentos'); if(inDesc){inDesc.readOnly=true;inDesc.style.background='#f0f0f0';}
           var inNota=document.getElementById('inNota'); if(inNota){inNota.readOnly=true;inNota.style.background='#f0f0f0';}
           var inNotaSig=document.getElementById('inNotaSig'); if(inNotaSig){inNotaSig.readOnly=true;inNotaSig.style.background='#f0f0f0';}
           var btnGas=document.getElementById('btnAddGasto'); if(btnGas) btnGas.style.display='none';
@@ -1309,12 +1322,13 @@ function recalc(){
   var gas=gastos.reduce(function(s,e){return s+(e.valor||0);},0);
   var dat=parseFloat(document.getElementById('inDatafono')?document.getElementById('inDatafono').value:0)||0;
   var tra=parseFloat(document.getElementById('inTransferencia')?document.getElementById('inTransferencia').value:0)||0;
+  var desc=parseFloat(document.getElementById('inDescuentos')?document.getElementById('inDescuentos').value:0)||0;
   var ent=entregas.reduce(function(s,e){return s+(e.valor||0);},0);
   // Actualizar campo Rappi (readonly, calculado)
   var inRappi=document.getElementById('inRappi');
   if(inRappi) inRappi.value=rappiTotal>0?rappiTotal:'';
-  // Efectivo a entregar descuenta Rappi igual que datáfono/transferencia
-  var ef=tv-gas-dat-tra-rappiTotal;
+  // Efectivo a entregar descuenta gastos, digital, rappi y descuentos
+  var ef=tv-gas-dat-tra-rappiTotal-desc;
   var dif=ent-ef;
   entregaFinal=entregas.some(function(x){return x.esFinal;});
   var mostrar=isAdmin||entregaFinal;
@@ -1322,6 +1336,7 @@ function recalc(){
   document.getElementById('rGastos').textContent=fmt(gas);
   document.getElementById('rDatafono').textContent=fmt(dat);
   document.getElementById('rTransferencia').textContent=fmt(tra);
+  document.getElementById('rDescuentos').textContent=fmt(desc);
   document.getElementById('rRappi').textContent=rappiTotal>0?fmt(rappiTotal):'$0';
   document.getElementById('rEfectivo').textContent=mostrar?fmt(ef):'—';
   var rEnt=document.getElementById('rEntregado');
@@ -1363,6 +1378,7 @@ function guardar(){
         gastos_list:gastos,entregas_list:entregas,
         datafono_val:parseFloat(document.getElementById('inDatafono').value)||0,
         transferencia_val:parseFloat(document.getElementById('inTransferencia').value)||0,
+        descuentos_val:parseFloat(document.getElementById('inDescuentos')?document.getElementById('inDescuentos').value:0)||0,
         gastos:gastos.reduce(function(s,e){return s+(e.valor||0);},0),
         digital:(parseFloat(document.getElementById('inDatafono').value)||0)+(parseFloat(document.getElementById('inTransferencia').value)||0),
         entregado:entregas.reduce(function(s,e){return s+(e.valor||0);},0),
@@ -1621,7 +1637,7 @@ function abrirCierre(){
   var gas=gastos.reduce(function(s,e){return s+(e.valor||0);},0);
   var dat=parseFloat(document.getElementById('inDatafono')?document.getElementById('inDatafono').value:0)||0;
   var tra=parseFloat(document.getElementById('inTransferencia')?document.getElementById('inTransferencia').value:0)||0;
-  var ef=tv-gas-dat-tra;
+  var ef=tv-gas-dat-tra-desc;
   var dif=ent-ef;
   var pN={autopista:'Vaca Autopista',boquia:'Vaca Boquia',tebaida:'Vaca Tebaida',km25:'Vaca KM 25',km18:'Vaca KM 18',penon:'Vaca Peñón',colseguros:'Vaca Colseguros'}[sesion.punto];
   var tN=sesion.turno==='manana'?'☀ Mañana':sesion.turno==='tarde'?'🌙 Tarde':'⬛ Completo';
@@ -1634,6 +1650,7 @@ function abrirCierre(){
     +'<div style="display:flex;justify-content:space-between;margin-bottom:5px;"><span>Gastos</span><b>'+fmt(gas)+'</b></div>'
     +'<div style="display:flex;justify-content:space-between;margin-bottom:5px;"><span>Datáfono</span><b>'+fmt(dat)+'</b></div>'
     +'<div style="display:flex;justify-content:space-between;margin-bottom:5px;"><span>Transferencias</span><b>'+fmt(tra)+'</b></div>'
+    +(desc>0?'<div style="display:flex;justify-content:space-between;margin-bottom:5px;"><span>Descuentos</span><b>'+fmt(desc)+'</b></div>':'')
     +'<div style="display:flex;justify-content:space-between;margin-bottom:5px;border-top:1px solid var(--gris2);padding-top:5px;"><span><b>Efectivo a entregar</b></span><b style="color:var(--madera)">'+fmt(ef)+'</b></div>'
     +'<div style="display:flex;justify-content:space-between;margin-bottom:5px;"><span>Total entregado</span><b>'+fmt(ent)+'</b></div>'
     +'<div style="display:flex;justify-content:space-between;padding:6px 0;background:'+(dif===0?'#f0fff0':dif<0?'#fff0f0':'#fff8e0')+';border-radius:4px;padding:5px 8px;margin-top:3px;"><span><b>Diferencia</b></span><b style="color:'+difCol+'">'+difTxt+'</b></div>'
@@ -1823,6 +1840,7 @@ function confirmarCierre(){
     gastos_list:gastos,entregas_list:entregas,
     datafono_val:parseFloat(document.getElementById('inDatafono').value)||0,
     transferencia_val:parseFloat(document.getElementById('inTransferencia').value)||0,
+    descuentos_val:parseFloat(document.getElementById('inDescuentos')?document.getElementById('inDescuentos').value:0)||0,
     gastos:gastos.reduce(function(s,e){return s+(e.valor||0);},0),
     digital:(parseFloat(document.getElementById('inDatafono').value)||0)+(parseFloat(document.getElementById('inTransferencia').value)||0),
     entregado:entregas.reduce(function(s,e){return s+(e.valor||0);},0),
@@ -1849,7 +1867,7 @@ function imprimirTurno(){
   var dat=parseFloat(document.getElementById('inDatafono')?document.getElementById('inDatafono').value:0)||0;
   var tra=parseFloat(document.getElementById('inTransferencia')?document.getElementById('inTransferencia').value:0)||0;
   var ent=entregas.reduce(function(s,e){return s+(e.valor||0);},0);
-  var ef=tv-gas-dat-tra-rappiTotal;
+  var ef=tv-gas-dat-tra-rappiTotal-desc;
   var dif=ent-ef;
   var nota=document.getElementById('inNota').value;
   var hora=new Date().toLocaleTimeString('es-CO',{timeZone:'America/Bogota',hour:'2-digit',minute:'2-digit'});
@@ -1906,6 +1924,7 @@ function imprimirTurno(){
     +'<div class="col2">'
     +'<div class="box"><div class="sec">Gastos</div>'+listaEntradas(gastos,false)+'<div class="rr" style="border-top:1px solid #ccc;margin-top:4px;padding-top:3px;"><b>Total</b><b>'+fmt(gas)+'</b></div></div>'
     +'<div class="box"><div class="sec">Datáfono</div><div class="rr"><b>Total</b><b>'+fmt(dat)+'</b></div></div>'
+    +(desc>0?'<div class="box"><div class="sec">Descuentos</div><div class="rr"><b>Total</b><b>'+fmt(desc)+'</b></div></div>':'')
     +'<div class="box"><div class="sec">Transferencias</div><div class="rr"><b>Total</b><b>'+fmt(tra)+'</b></div></div>'
     +'<div class="box"><div class="sec">Entregas efectivo</div>'+listaEntradas(entregas,true)+'<div class="rr" style="border-top:1px solid #ccc;margin-top:4px;padding-top:3px;"><b>Total</b><b>'+fmt(ent)+'</b></div></div>'
     +'</div>'
@@ -2335,7 +2354,7 @@ function exportarDetalleExcel(){
         turnos.forEach(function(t){
           var tv=(t.snapshot||[]).reduce(function(s,r){return s+(r.total_venta||0);},0);
           var rap=(t.snapshot||[]).reduce(function(s,r){return s+(r.rappi_venta||0);},0);
-          var gas=t.gastos||0; var dat=t.datafono_val||0; var tra=t.transferencia_val||0;
+          var gas=t.gastos||0; var dat=t.datafono_val||0; var tra=t.transferencia_val||0; var desc=t.descuentos_val||0; var desc=t.descuentos_val||0;
           var ef=tv-gas-dat-tra-rap; var ent=t.entregado||0; var dif=ent-ef;
           rows.push([t.fecha,pN[t.punto]||t.punto,tN[t.turno]||t.turno,t.cajero||'',t.cajero_aux||'',
             fmt2(tv),fmt2(gas),fmt2(dat),fmt2(tra),fmt2(rap),fmt2(ef),fmt2(ent),fmt2(dif),t.nota||'']);
@@ -2402,7 +2421,7 @@ function exportarResumenMensual(){
           tp.forEach(function(t){
             var tv=(t.snapshot||[]).reduce(function(s,r){return s+(r.total_venta||0);},0);
             var rap=(t.snapshot||[]).reduce(function(s,r){return s+(r.rappi_venta||0);},0);
-            var gas=t.gastos||0; var dat=t.datafono_val||0; var tra=t.transferencia_val||0;
+            var gas=t.gastos||0; var dat=t.datafono_val||0; var tra=t.transferencia_val||0; var desc=t.descuentos_val||0; var desc=t.descuentos_val||0;
             var ef=tv-gas-dat-tra-rap; var ent=t.entregado||0; var dif=ent-ef;
             tot.tv+=tv;tot.gas+=gas;tot.dat+=dat;tot.tra+=tra;tot.rap+=rap;tot.ent+=ent;
             if(dif<0)tot.falt+=Math.abs(dif);else if(dif>0)tot.sobr+=dif;
@@ -2535,7 +2554,7 @@ function buscarHistorial(){
           var tv=(t.snapshot||[]).reduce(function(s,r){return s+(r.total_venta||0);},0);
           var rap=(t.snapshot||[]).reduce(function(s,r){return s+(r.rappi_venta||0);},0);
           var gas=t.gastos||0;
-          var dat=t.datafono_val||0; var tra=t.transferencia_val||0;
+          var dat=t.datafono_val||0; var tra=t.transferencia_val||0; var desc=t.descuentos_val||0;
           var ef=tv-gas-dat-tra-rap;
           var ent=(t.entregas_list||[]).reduce(function(s,e){return s+(e.valor||0);},0);
           var dif=ent-ef;
@@ -2590,7 +2609,7 @@ function exportarTurnoExcel(turnoKey){
         });
         var tv=(t.snapshot||[]).reduce(function(s,r){return s+(r.total_venta||0);},0);
         var rap=(t.snapshot||[]).reduce(function(s,r){return s+(r.rappi_venta||0);},0);
-        var gas=t.gastos||0; var dat=t.datafono_val||0; var tra=t.transferencia_val||0;
+        var gas=t.gastos||0; var dat=t.datafono_val||0; var tra=t.transferencia_val||0; var desc=t.descuentos_val||0; var desc=t.descuentos_val||0;
         var ef=tv-gas-dat-tra-rap; var ent=t.entregado||0; var dif=ent-ef;
         invRows.push([]);
         invRows.push(['TOTALES','','','','','','','','',fmt2(tv)]);
@@ -2654,8 +2673,9 @@ function calcEditTotales(){
   var gas=(turnoEditando.gastos_list||[]).reduce(function(s,e){return s+(e.valor||0);},0);
   var dat=parseFloat(document.getElementById('editDatafono')?document.getElementById('editDatafono').value:0)||0;
   var tra=parseFloat(document.getElementById('editTransferencia')?document.getElementById('editTransferencia').value:0)||0;
+  var desc=parseFloat(document.getElementById('editDescuentos')?document.getElementById('editDescuentos').value:0)||0;
   var ent=(turnoEditando.entregas_list||[]).reduce(function(s,e){return s+(e.valor||0);},0);
-  var ef=tv-gas-dat-tra-rappiTotal;
+  var ef=tv-gas-dat-tra-rappiTotal-desc;
   var dif=ent-ef;
   var difTxt=dif===0?'✔ Cuadra':dif<0?'Falta '+fmt(Math.abs(dif)):'Sobran '+fmt(dif);
   var difCol=dif===0?'#2d6a2d':dif<0?'#b02020':'#7a4a00';
@@ -2667,6 +2687,7 @@ function calcEditTotales(){
       +'<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:.8rem;"><span>− Datáfono</span><b>'+fmt(dat)+'</b></div>'
       +'<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:.8rem;"><span>− Transferencia</span><b>'+fmt(tra)+'</b></div>'
       +(rappiTotal>0?'<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:.8rem;"><span>− Rappi</span><b>'+fmt(rappiTotal)+'</b></div>':'')
+      +(desc>0?'<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:.8rem;"><span>− Descuentos</span><b>'+fmt(desc)+'</b></div>':'')
       +'<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:.88rem;border-top:1px solid var(--gris2);margin-top:4px;"><span><b>Efectivo a entregar</b></span><b style="color:var(--madera)">'+fmt(ef)+'</b></div>'
       +'<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:.8rem;"><span>Total entregado</span><b>'+fmt(ent)+'</b></div>'
       +'<div style="display:flex;justify-content:space-between;padding:6px 8px;border-radius:5px;background:'+(dif===0?'#f0fff0':dif<0?'#fff0f0':'#fff8e0')+';">'
@@ -2749,6 +2770,8 @@ function abrirEditarTurno(t){
     +'<input type="number" id="editDatafono" value="'+(t.datafono_val||0)+'" style="width:100%;padding:6px 8px;border:1.5px solid var(--gris2);border-radius:5px;font-family:Inter,sans-serif;font-size:.83rem;background:var(--gris1);"></div>'
     +'<div style="flex:1;"><label style="font-size:.7rem;font-weight:600;display:block;margin-bottom:3px;">Transferencia</label>'
     +'<input type="number" id="editTransferencia" value="'+(t.transferencia_val||0)+'" style="width:100%;padding:6px 8px;border:1.5px solid var(--gris2);border-radius:5px;font-family:Inter,sans-serif;font-size:.83rem;background:var(--gris1);"></div>'
+    +'<div style="flex:1;"><label style="font-size:.7rem;font-weight:600;display:block;margin-bottom:3px;">Descuentos</label>'
+    +'<input type="number" id="editDescuentos" value="'+(t.descuentos_val||0)+'" style="width:100%;padding:6px 8px;border:1.5px solid var(--gris2);border-radius:5px;font-family:Inter,sans-serif;font-size:.83rem;background:var(--gris1);"></div>'
     +'</div>';
   body.appendChild(secDig);
   secDig.addEventListener('input',calcEditTotales);
@@ -2824,6 +2847,7 @@ function guardarEdicionTurno(){
   });
   var dat=parseFloat(document.getElementById('editDatafono').value)||0;
   var tra=parseFloat(document.getElementById('editTransferencia').value)||0;
+  var desc=parseFloat(document.getElementById('editDescuentos')?document.getElementById('editDescuentos').value:0)||0;
   var nota=document.getElementById('editNota').value;
   var tv=snap.reduce(function(s,r){return s+(r.total_venta||0);},0);
   var gas=(turnoEditando.gastos_list||[]).reduce(function(s,e){return s+(e.valor||0);},0);
@@ -2832,7 +2856,7 @@ function guardarEdicionTurno(){
     snapshot:snap,
     gastos_list:turnoEditando.gastos_list||[],
     entregas_list:turnoEditando.entregas_list||[],
-    datafono_val:dat, transferencia_val:tra,
+    datafono_val:dat, transferencia_val:tra, descuentos_val:desc,
     gastos:gas, digital:dat+tra, entregado:ent,
     cajero:turnoEditando.cajero,
     cajero_aux:turnoEditando.cajero_aux||'',
