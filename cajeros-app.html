@@ -570,6 +570,17 @@ var PASS_ADMIN2 = '@lavaca2026';
 
 function esAdmin(clave){ return clave===PASS_ADMIN || clave===PASS_ADMIN2; }
 var sesion = null;
+
+// Grupos de precio: 'abc' = Autopista/Boquia/Tebaida, 'kpp' = KM25/KM18/Peñón/Colseguros
+var GRUPO_PRECIO = {
+  autopista:'abc', boquia:'abc', tebaida:'abc',
+  km25:'kpp', km18:'kpp', penon:'kpp', colseguros:'kpp'
+};
+function getPrecio(p, punto){
+  var g = punto ? GRUPO_PRECIO[punto] : null;
+  if(g && p.precios && p.precios[g] !== undefined && p.precios[g] !== null && p.precios[g] !== '') return Number(p.precios[g]);
+  return p.precio || 0;
+}
 var isAdmin = false;
 var productos = [];
 var invRows = [];
