@@ -1807,25 +1807,26 @@ function abrirFaltantes(){
   document.getElementById('faltantesModal').classList.add('open');
 }
 
+function normNombre(s){
+  // Normaliza nombre para agrupación: trim + lowercase para comparar,
+  // pero conserva la versión con capitalización original para mostrar
+  return (s||'').trim().toLowerCase().replace(/\s+/g,' ');
+}
+function titleCase(s){
+  return (s||'').trim().replace(/\w\S*/g,function(w){return w.charAt(0).toUpperCase()+w.slice(1).toLowerCase();});
+}
+
 function buscarFaltantes(){
   var desde=document.getElementById('faltDesde').value;
   var hasta=document.getElementById('faltHasta').value;
-  var cajeroFiltro=document.getElementById('faltCajero').value.trim().toLowerCase();
+  var cajeroFiltro=document.getElementById('faltCajero').value.trim().toLowerCase().replace(/\s+/g,' ');
   if(!desde||!hasta){alert('Selecciona el rango de fechas.');return;}
   var res=document.getElementById('faltResultados');
   res.innerHTML='<p style="color:var(--gris4);font-size:.8rem;text-align:center;padding:12px;">Buscando...</p>';
 
-  sbGet('turnos_caja','fecha=gte.'+desde+'&fecha=lte.'+hasta+'&cerrado=eq.true&eliminado=eq.false&order=cajero.asc,fecha.asc')
+  sbGet('turnos_caja','fecha=gte.'+desde+'&fecha=lte.'+hasta+'&cerrado=eq.true&eliminado=eq.false&order=fecha.asc')
     .then(function(turnos){
-      // Filtrar por cajero si se especificó — buscar en principal Y auxiliar
-      if(cajeroFiltro){
-        turnos=turnos.filter(function(t){
-          var enPrincipal=(t.cajero||'').toLowerCase().includes(cajeroFiltro);
-          var enAux=(t.cajero_aux||'').toLowerCase().includes(cajeroFiltro);
-          return enPrincipal || enAux;
-        });
-      }
-      // Calcular faltante de cada turno y expandir por cajeros
+      // Calcular faltante de cada turno y expandir por cajero
       var conFaltante=[];
       turnos.forEach(function(t){
         var tv=(t.snapshot||[]).reduce(function(s,r){return s+(r.total_venta||0);},0);
@@ -1837,32 +1838,45 @@ function buscarFaltantes(){
         var faltTotal=Math.abs(dif);
         var tieneAux=t.cajero_aux&&t.cajero_aux.trim();
         var faltPorCajero=tieneAux?Math.round(faltTotal/2):faltTotal;
-        var compartidoCon=tieneAux?t.cajero_aux.trim():'';
+        var nomPrincipal=titleCase(t.cajero||'');
+        var nomAux=tieneAux?titleCase(t.cajero_aux):'';
         // Cajero principal
         conFaltante.push({
-          cajero:t.cajero||'—',fecha:t.fecha,punto:t.punto,turno:t.turno,
-          faltante:faltPorCajero,compartidoCon:compartidoCon,faltTotal:faltTotal
+          cajero:nomPrincipal,cajeroNorm:normNombre(nomPrincipal),
+          fecha:t.fecha,punto:t.punto,turno:t.turno,
+          faltante:faltPorCajero,compartidoCon:nomAux,faltTotal:faltTotal
         });
         // Cajero auxiliar
         if(tieneAux){
           conFaltante.push({
-            cajero:t.cajero_aux.trim(),fecha:t.fecha,punto:t.punto,turno:t.turno,
-            faltante:faltPorCajero,compartidoCon:t.cajero||'—',faltTotal:faltTotal
+            cajero:nomAux,cajeroNorm:normNombre(nomAux),
+            fecha:t.fecha,punto:t.punto,turno:t.turno,
+            faltante:faltPorCajero,compartidoCon:nomPrincipal,faltTotal:faltTotal
           });
         }
       });
+
+      // Filtrar DESPUÉS de expandir — solo mostrar cajeros que coincidan con el filtro
+      if(cajeroFiltro){
+        conFaltante=conFaltante.filter(function(r){
+          return r.cajeroNorm.includes(cajeroFiltro);
+        });
+      }
 
       if(!conFaltante.length){
         res.innerHTML='<div style="text-align:center;padding:16px;color:var(--verde);font-weight:700;">✔ Sin faltantes en el período</div>';
         return;
       }
 
-      // Agrupar por cajero
+      // Agrupar por nombre normalizado (evita duplicados por mayúsculas/espacios)
       var porCajero={};
       conFaltante.forEach(function(r){
-        if(!porCajero[r.cajero]) porCajero[r.cajero]={items:[],total:0};
-        porCajero[r.cajero].items.push(r);
-        porCajero[r.cajero].total+=r.faltante;
+        var key=r.cajeroNorm;
+        if(!porCajero[key]) porCajero[key]={nombre:r.cajero,items:[],total:0};
+        // Si el nombre guardado tiene menos capitalización, preferir el más largo/correcto
+        if(r.cajero.length>porCajero[key].nombre.length) porCajero[key].nombre=r.cajero;
+        porCajero[key].items.push(r);
+        porCajero[key].total+=r.faltante;
       });
 
       var pN={autopista:'Autopista',boquia:'Boquia',tebaida:'Tebaida',km25:'KM 25',km18:'KM 18',penon:'Peñón',colseguros:'Colseguros'};
@@ -1871,8 +1885,9 @@ function buscarFaltantes(){
       res.innerHTML='';
       var textoWhatsapp='*Reporte de Faltantes*\n*Del '+desde+' al '+hasta+'*\n\n';
 
-      Object.keys(porCajero).sort().forEach(function(cajero){
-        var data=porCajero[cajero];
+      Object.keys(porCajero).sort().forEach(function(key){
+        var data=porCajero[key];
+        var cajero=data.nombre;
         var bloque=document.createElement('div');
         bloque.style.cssText='background:var(--gris1);border:1px solid var(--gris2);border-radius:8px;padding:12px;margin-bottom:10px;';
 
@@ -1886,22 +1901,22 @@ function buscarFaltantes(){
         data.items.forEach(function(it){
           var fila=document.createElement('div');
           fila.style.cssText='display:flex;justify-content:space-between;align-items:flex-start;padding:5px 0;border-bottom:1px dotted #ddd;font-size:.82rem;';
-          // Formatear fecha dd.mm.aa
           var parts=it.fecha.split('-');
           var fechaFmt=parts[2]+'.'+parts[1]+'.'+parts[0].slice(2);
           fila.innerHTML='<div>'
             +'<div style="font-weight:600;">'+fechaFmt+' '+(pN[it.punto]||it.punto)+' '+(tN[it.turno]||it.turno)+'</div>'
-            +(it.compartidoCon?'<div style="font-size:.72rem;color:var(--gris4);">Compartido con '+it.compartidoCon+' · Total turno: −'+fmt(it.faltTotal)+'</div>':'')
+            +(it.compartidoCon?'<div style="font-size:.72rem;color:var(--gris4);">Con '+it.compartidoCon+' · Faltante turno: −'+fmt(it.faltTotal)+'</div>':'')
             +'</div>'
             +'<div style="font-weight:700;color:var(--rojo);white-space:nowrap;">−'+fmt(it.faltante)+'</div>';
           bloque.appendChild(fila);
           textoWhatsapp+='📅 '+fechaFmt+' '+(pN[it.punto]||it.punto)+' '+(tN[it.turno]||it.turno)+'\n';
-          if(it.compartidoCon) textoWhatsapp+='👥 Compartido con '+it.compartidoCon+' (total turno: −'+fmt(it.faltTotal)+')\n';
-          textoWhatsapp+='💰 Faltante: −'+fmt(it.faltante)+'\n';
+          if(it.compartidoCon) textoWhatsapp+='👥 Con '+it.compartidoCon+' (faltante turno: −'+fmt(it.faltTotal)+')\n';
+          textoWhatsapp+='💰 Le corresponde: −'+fmt(it.faltante)+'\n';
         });
 
+        // Total siempre visible, con fondo destacado
         var total=document.createElement('div');
-        total.style.cssText='display:flex;justify-content:space-between;margin-top:7px;font-weight:700;font-size:.88rem;';
+        total.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding:7px 10px;background:#fff0f0;border-radius:5px;border:1px solid #f5c0c0;font-weight:700;font-size:.9rem;';
         total.innerHTML='<span>Total faltante</span><span style="color:var(--rojo);">−'+fmt(data.total)+'</span>';
         bloque.appendChild(total);
         res.appendChild(bloque);
