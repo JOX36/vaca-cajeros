@@ -885,6 +885,15 @@ function cargarInventario(){
         document.getElementById('inNota').value='';
         var nsEl0=document.getElementById('inNotaSig'); if(nsEl0) nsEl0.value='';
         if(saved){
+          // ── Seguridad: restaurar cajero original del turno ──
+          // Si el turno ya existe en Supabase, siempre usar el cajero guardado,
+          // no el nombre que se digitó en el login. Evita que un admin pise el cajero.
+          if(saved.cajero&&saved.cajero.trim()){
+            sesion.cajero=saved.cajero.trim();
+            sesion.cajeroAux=(saved.cajero_aux||'').trim();
+            var tN2=sesion.turno==='manana'?'☀ Mañana':sesion.turno==='tarde'?'🌙 Tarde':'⬛ Completo';
+            document.getElementById('turnoBadge').textContent=tN2+' — '+sesion.cajero+(sesion.cajeroAux?' & '+sesion.cajeroAux:'');
+          }
           gastos=saved.gastos_list||[];
           entregas=saved.entregas_list||[];
           entregaFinal=saved.entrega_final||false;
