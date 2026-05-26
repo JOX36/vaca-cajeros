@@ -780,7 +780,9 @@ function cargarInventario(){
           // Supabase puede devolver puntos como string JSON — parsear si necesario
           var pts=p.puntos;
           if(typeof pts==='string'){try{pts=JSON.parse(pts);}catch(e){pts=null;}}
-          return {id:p.id,name:p.name,precio:p.precio||0,
+          var prc2=p.precios;
+          if(typeof prc2==='string'){try{prc2=JSON.parse(prc2);}catch(e){prc2=null;}}
+          return {id:p.id,name:p.name,precio:p.precio||0,precios:prc2||{},
             puntos:Array.isArray(pts)&&pts.length?pts:['autopista','boquia','tebaida','km25','km18','penon','colseguros']};
         });
       // Filtrar solo productos que aplican para este punto
@@ -848,7 +850,7 @@ function cargarInventario(){
           // Turno nuevo: usar productosPunto con inv_final del turno anterior
           invRows=productosPunto.map(function(p){
             var antVal=invAnt[p.id]!==undefined?invAnt[p.id]:0;
-            return {id:p.id,name:p.name,precio:p.precio||0,
+            return {id:p.id,name:p.name,precio:getPrecio(p,sesion.punto),precios:p.precios||{},
               ant:antVal,
               entradas:[],entrante:null,dev:null,rappi:null,inv_final:null,pedido:null,
               disponible:0,vendido:0,total_venta:0};
@@ -953,9 +955,11 @@ function buildTable(){
       inPrecio.style.cssText='font-family:Inter,sans-serif;font-size:.78rem;width:70px;padding:3px 5px;border:1.5px solid var(--madera);border-radius:4px;background:#fff8f0;text-align:right;';
       inPrecio.addEventListener('change',(function(row){return function(){
         row.precio=parseFloat(this.value)||0;
+        var grp=GRUPO_PRECIO[sesion?sesion.punto:null];
+        if(grp){if(!row.precios)row.precios={};row.precios[grp]=row.precio;}
         fetch(SB_URL+'/rest/v1/productos_caja?id=eq.'+row.id,{
           method:'PATCH',headers:Object.assign({},HEADS,{'Prefer':'return=minimal'}),
-          body:JSON.stringify({precio:row.precio,updated_at:new Date().toISOString()})
+          body:JSON.stringify({precio:row.precio,precios:row.precios||{},updated_at:new Date().toISOString()})
         }).then(function(){setSyncStatus('ok','✓ Precio guardado'); calcFila(row); updateFila(row);});
       };})(r));
       tdP.appendChild(inPrecio);
@@ -1385,7 +1389,9 @@ function openAdmin(){
       .map(function(p){
         var pts=p.puntos;
         if(typeof pts==='string'){try{pts=JSON.parse(pts);}catch(e){pts=null;}}
-        return {id:p.id,name:p.name,precio:p.precio||0,
+        var prc3=p.precios;
+        if(typeof prc3==='string'){try{prc3=JSON.parse(prc3);}catch(e){prc3=null;}}
+        return {id:p.id,name:p.name,precio:p.precio||0,precios:prc3||{},
           puntos:Array.isArray(pts)&&pts.length?pts:['autopista','boquia','tebaida','km25','km18','penon','colseguros']};
       });
     productosBorrar=[];
@@ -1422,13 +1428,23 @@ function renderProdAdmin(){
     var nameEl=document.createElement('span'); nameEl.className='prod-admin-name';
     nameEl.textContent=p.name+(p._new?' (nuevo)':'');
     var precioWrap=document.createElement('div'); precioWrap.className='prod-admin-precio';
-    var sym=document.createElement('span'); sym.textContent='$';
-    var inP=document.createElement('input'); inP.type='number'; inP.min='0';
-    inP.value=p.precio||''; inP.placeholder='0';
-    inP.style.cssText='width:80px;padding:4px 6px;border:1.5px solid var(--gris2);border-radius:4px;font-size:.82rem;text-align:right;background:white;';
-    inP.addEventListener('input',(function(prod){return function(){prod.precio=this.value===''?0:parseFloat(this.value)||0;};})(p));
-    inP.addEventListener('change',(function(prod){return function(){prod.precio=this.value===''?0:parseFloat(this.value)||0;};})(p));
-    precioWrap.appendChild(sym); precioWrap.appendChild(inP);
+    precioWrap.style.cssText='display:flex;flex-direction:column;gap:3px;';
+    // Precio grupo ABC (Autopista/Boquia/Tebaida)
+    var wABC=document.createElement('div'); wABC.style.cssText='display:flex;align-items:center;gap:3px;';
+    var lABC=document.createElement('span'); lABC.textContent='A/B/T $'; lABC.style.cssText='font-size:.62rem;color:#7a3a10;font-weight:700;white-space:nowrap;';
+    var inABC=document.createElement('input'); inABC.type='number'; inABC.min='0';
+    inABC.value=(p.precios&&p.precios.abc!==undefined&&p.precios.abc!=='')?p.precios.abc:(p.precio||'');
+    inABC.placeholder='0'; inABC.style.cssText='width:72px;padding:3px 5px;border:1.5px solid #c8a070;border-radius:4px;font-size:.82rem;text-align:right;background:#fff8f0;';
+    inABC.addEventListener('input',(function(prod){return function(){if(!prod.precios)prod.precios={};prod.precios.abc=this.value===''?'':parseFloat(this.value)||0;};})(p));
+    wABC.appendChild(lABC); wABC.appendChild(inABC); precioWrap.appendChild(wABC);
+    // Precio grupo KPP (KM25/KM18/Peñón/Colseguros)
+    var wKPP=document.createElement('div'); wKPP.style.cssText='display:flex;align-items:center;gap:3px;';
+    var lKPP=document.createElement('span'); lKPP.textContent='K/P/C $'; lKPP.style.cssText='font-size:.62rem;color:#1a4a7a;font-weight:700;white-space:nowrap;';
+    var inKPP=document.createElement('input'); inKPP.type='number'; inKPP.min='0';
+    inKPP.value=(p.precios&&p.precios.kpp!==undefined&&p.precios.kpp!=='')?p.precios.kpp:(p.precio||'');
+    inKPP.placeholder='0'; inKPP.style.cssText='width:72px;padding:3px 5px;border:1.5px solid #7090c8;border-radius:4px;font-size:.82rem;text-align:right;background:#f0f4ff;';
+    inKPP.addEventListener('input',(function(prod){return function(){if(!prod.precios)prod.precios={};prod.precios.kpp=this.value===''?'':parseFloat(this.value)||0;};})(p));
+    wKPP.appendChild(lKPP); wKPP.appendChild(inKPP); precioWrap.appendChild(wKPP);
     var btnDel=document.createElement('button'); btnDel.className='prod-admin-del'; btnDel.textContent='🗑';
     btnDel.addEventListener('click',(function(prod){return function(){
       if(!confirm('¿Eliminar "'+prod.name+'"?'))return;
@@ -1490,7 +1506,7 @@ function addProdAdmin(){
   var precio=parseFloat(document.getElementById('newProdPrecio').value)||0;
   if(!name){alert('Escribe el nombre del producto.');return;}
   var id='vta_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
-  productos.push({id:id,name:name,precio:precio,_new:true});
+  productos.push({id:id,name:name,precio:precio,precios:{abc:precio,kpp:precio},_new:true});
   document.getElementById('newProdName').value='';
   document.getElementById('newProdPrecio').value='';
   renderProdAdmin();
@@ -1520,6 +1536,7 @@ function saveAdmin(){
     if(p._new){
       data.id=p.id;
       data.puntos=p.puntos||['autopista','boquia','tebaida','km25','km18','penon','colseguros'];
+      data.precios=p.precios||{};
       return fetch(SB_URL+'/rest/v1/productos_caja',{
         method:'POST',
         headers:Object.assign({},HEADS,{'Prefer':'resolution=merge-duplicates'}),
@@ -1529,7 +1546,7 @@ function saveAdmin(){
       return fetch(SB_URL+'/rest/v1/productos_caja?id=eq.'+p.id,{
         method:'PATCH',
         headers:Object.assign({},HEADS,{'Prefer':'return=minimal'}),
-        body:JSON.stringify({precio:p.precio,puntos:p.puntos||['autopista','boquia','tebaida'],orden:i,updated_at:new Date().toISOString()})
+        body:JSON.stringify({precio:p.precio,precios:p.precios||{},puntos:p.puntos||['autopista','boquia','tebaida'],orden:i,updated_at:new Date().toISOString()})
       }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t);});});
     }
   });
@@ -1549,7 +1566,7 @@ function saveAdmin(){
         });
       invRows.forEach(function(r){
         var p=productos.find(function(x){return x.id===r.id;});
-        if(p){r.precio=p.precio;calcFila(r);}
+        if(p){r.precio=getPrecio(p,sesion?sesion.punto:null);r.precios=p.precios||{};calcFila(r);}
       });
       buildTable(); recalc();
       if(sesion) guardar();
