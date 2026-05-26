@@ -328,6 +328,7 @@ tr.drag-over{background:#e8f4fd!important;outline:2px dashed var(--madera);}
     <button class="btn" style="background:#2a1a0a;color:#c8a050;display:none;flex-shrink:0;" id="btnPapelera">🗑 Papelera</button>
     <button class="btn" style="background:#3a0a0a;color:#e88;display:none;flex-shrink:0;" id="btnFaltantes">⚠ Faltantes</button>
     <button class="btn btn-imprimir" id="btnImprimir" style="flex-shrink:0;">🖨 Imprimir</button>
+    <button class="btn" id="btnImprimirPedido" style="background:#5a2d82;color:#fff;flex-shrink:0;">📦 Pedido</button>
     <button class="btn btn-cerrar" id="btnCerrar" style="flex-shrink:0;">📅 Cerrar Turno</button>
   </div>
   <!-- FAB agregar producto (solo admin) -->
@@ -607,6 +608,7 @@ document.getElementById('btnSaveAdmin').addEventListener('click', saveAdmin);
 document.getElementById('btnAddProd').addEventListener('click', addProdAdmin);
 document.getElementById('btnCerrar').addEventListener('click', abrirCierre);
 document.getElementById('btnImprimir').addEventListener('click', imprimirTurno);
+document.getElementById('btnImprimirPedido').addEventListener('click', imprimirPedido);
 document.getElementById('btnDashboard').addEventListener('click', abrirDashboard);
 document.getElementById('btnResumen').addEventListener('click', function(){
   var hoy=new Date().toLocaleDateString('en-CA',{timeZone:'America/Bogota'});
@@ -1622,6 +1624,168 @@ function abrirCierre(){
     +'</div>';
   document.getElementById('cierreDetalle').innerHTML=det;
   document.getElementById('cierreModal').classList.add('open');
+}
+
+// ── IMPRIMIR PEDIDO (doble copia: Producción + Caja) ──────────────────────
+function imprimirPedido(){
+  if(!sesion)return;
+  var conPedido=invRows.filter(function(r){return r.pedido!==null&&r.pedido!==undefined&&r.pedido!==''&&Number(r.pedido)>0;});
+  if(!conPedido.length){alert('⚠ No hay productos con pedido registrado.\n\nIngresa las cantidades en la columna "Pedido" antes de imprimir.');return;}
+
+  var pNombre={autopista:'Vaca Autopista',boquia:'Vaca Boquia',tebaida:'Vaca Tebaida',km25:'Vaca KM 25',km18:'Vaca KM 18',penon:'Vaca Peñón',colseguros:'Vaca Colseguros'}[sesion.punto]||sesion.punto;
+  var tNombre=sesion.turno==='manana'?'Mañana ☀':sesion.turno==='tarde'?'Tarde 🌙':'Completo ⬛';
+  var ahora=new Date();
+  var horaStr=ahora.getHours().toString().padStart(2,'0')+':'+ahora.getMinutes().toString().padStart(2,'0');
+  var cajeroStr=sesion.cajero+(sesion.cajeroAux?' / '+sesion.cajeroAux:'');
+  var totalPedido=conPedido.reduce(function(s,r){return s+Number(r.pedido);},0);
+
+  var logoSVG='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 60" width="52" height="39">'
+    +'<ellipse cx="40" cy="36" rx="26" ry="18" fill="#f5f0e8" stroke="#5a3a1a" stroke-width="1.5"/>'
+    +'<ellipse cx="40" cy="36" rx="14" ry="10" fill="#c8a878"/>'
+    +'<circle cx="26" cy="30" r="7" fill="#f5f0e8" stroke="#5a3a1a" stroke-width="1.2"/>'
+    +'<circle cx="54" cy="30" r="7" fill="#f5f0e8" stroke="#5a3a1a" stroke-width="1.2"/>'
+    +'<ellipse cx="40" cy="50" rx="8" ry="4" fill="#f5c0c0" stroke="#c08080" stroke-width="1"/>'
+    +'<circle cx="37" cy="50" r="1.2" fill="#c08080"/><circle cx="43" cy="50" r="1.2" fill="#c08080"/>'
+    +'<circle cx="33" cy="27" r="2.5" fill="white" stroke="#5a3a1a" stroke-width="1"/>'
+    +'<circle cx="47" cy="27" r="2.5" fill="white" stroke="#5a3a1a" stroke-width="1"/>'
+    +'<circle cx="34" cy="27.5" r="1" fill="#2a1a0a"/><circle cx="48" cy="27.5" r="1" fill="#2a1a0a"/>'
+    +'<path d="M36 33 Q40 36 44 33" stroke="#5a3a1a" stroke-width="1.2" fill="none" stroke-linecap="round"/>'
+    +'<ellipse cx="38" cy="34.5" rx="2" ry="1.2" fill="#f5c0c0"/>'
+    +'<path d="M28 18 Q24 8 20 10" stroke="#5a3a1a" stroke-width="2" fill="none" stroke-linecap="round"/>'
+    +'<path d="M52 18 Q56 8 60 10" stroke="#5a3a1a" stroke-width="2" fill="none" stroke-linecap="round"/>'
+    +'<ellipse cx="22" cy="10" rx="4" ry="3" fill="#f5f0e8" stroke="#5a3a1a" stroke-width="1.2"/>'
+    +'<ellipse cx="58" cy="10" rx="4" ry="3" fill="#f5f0e8" stroke="#5a3a1a" stroke-width="1.2"/>'
+    +'<ellipse cx="30" cy="42" rx="3" ry="6" fill="#f5f0e8" stroke="#5a3a1a" stroke-width="1"/>'
+    +'<ellipse cx="38" cy="44" rx="3" ry="6" fill="#f5f0e8" stroke="#5a3a1a" stroke-width="1"/>'
+    +'<ellipse cx="46" cy="42" rx="3" ry="6" fill="#f5f0e8" stroke="#5a3a1a" stroke-width="1"/>'
+    +'</svg>';
+
+  // Tijera SVG para la línea de corte
+  var tijeraSVG='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" style="vertical-align:middle;opacity:.5;">'
+    +'<circle cx="6" cy="6" r="3" fill="none" stroke="#666" stroke-width="1.5"/>'
+    +'<circle cx="6" cy="18" r="3" fill="none" stroke="#666" stroke-width="1.5"/>'
+    +'<line x1="8.5" y1="7.5" x2="21" y2="3" stroke="#666" stroke-width="1.5" stroke-linecap="round"/>'
+    +'<line x1="8.5" y1="16.5" x2="21" y2="21" stroke="#666" stroke-width="1.5" stroke-linecap="round"/>'
+    +'<line x1="8.5" y1="7.5" x2="14" y2="12" stroke="#666" stroke-width="1.5" stroke-linecap="round"/>'
+    +'<line x1="8.5" y1="16.5" x2="14" y2="12" stroke="#666" stroke-width="1.5" stroke-linecap="round"/>'
+    +'</svg>';
+
+  function buildTabla(accentColor, accentLight){
+    var filas='';
+    conPedido.forEach(function(r,i){
+      var bg=i%2===0?'#fafafa':'#fff';
+      filas+='<tr style="background:'+bg+';">'
+        +'<td style="padding:5px 6px;border-bottom:1px solid #eee;font-size:.75rem;font-weight:600;color:#222;max-width:120px;word-break:break-word;">'+escH(r.name)+'</td>'
+        +'<td style="padding:5px 6px;border-bottom:1px solid #eee;text-align:center;font-size:.75rem;color:#666;">'+r.disponible+'</td>'
+        +'<td style="padding:5px 6px;border-bottom:1px solid #eee;text-align:center;font-size:.82rem;font-weight:800;color:'+accentColor+';">'+r.pedido+'</td>'
+        +'<td style="padding:5px 6px;border-bottom:1px solid #eee;text-align:center;">'
+        +'<div style="width:40px;height:22px;border:1.5px solid #ccc;border-radius:3px;margin:0 auto;background:#fff;"></div>'
+        +'</td>'
+        +'</tr>';
+    });
+    filas+='<tr style="background:'+accentLight+';">'
+      +'<td colspan="2" style="padding:6px;font-size:.72rem;color:#666;font-style:italic;">Total unidades</td>'
+      +'<td style="padding:6px;text-align:center;font-weight:900;font-size:.88rem;color:'+accentColor+';">'+totalPedido+'</td>'
+      +'<td></td>'
+      +'</tr>';
+    return filas;
+  }
+
+  function buildCopiaHTML(tipo){
+    var esProd=tipo==='PRODUCCIÓN';
+    var accentColor=esProd?'#7a3a10':'#1a4a7a';
+    var accentLight=esProd?'#f5ece0':'#e0edf5';
+    var marcaTexto=esProd?'PRODUCCIÓN':'CAJA';
+    var marcaOpacity=esProd?'rgba(139,60,20,0.10)':'rgba(20,80,139,0.10)';
+
+    return '<div class="copia" style="position:relative;overflow:hidden;padding:12px 14px;height:100%;">'
+      // Marca de agua
+      +'<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-40deg);'
+      +'font-size:52px;font-weight:900;color:'+marcaOpacity+';letter-spacing:4px;'
+      +'pointer-events:none;white-space:nowrap;font-family:Arial,sans-serif;z-index:0;">'+marcaTexto+'</div>'
+      +'<div style="position:relative;z-index:1;">'
+      // Header
+      +'<div style="display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid '+accentColor+';padding-bottom:8px;margin-bottom:8px;">'
+      +'<div style="display:flex;align-items:center;gap:7px;">'+logoSVG
+      +'<div><div style="font-size:.88rem;font-weight:800;color:'+accentColor+';">La Vaca Original</div>'
+      +'<div style="font-size:.6rem;color:#999;">Orden de Pedido</div></div></div>'
+      +'<div style="text-align:right;">'
+      +'<div style="background:'+accentColor+';color:#fff;font-size:.6rem;font-weight:700;padding:2px 8px;border-radius:10px;letter-spacing:.8px;">'+tipo+'</div>'
+      +'<div style="font-size:.62rem;color:#999;margin-top:3px;">'+sesion.fecha+' · '+horaStr+'</div>'
+      +'</div></div>'
+      // Info turno
+      +'<div style="background:'+accentLight+';border-radius:5px;padding:6px 8px;margin-bottom:8px;display:grid;grid-template-columns:1fr 1fr;gap:3px 10px;">'
+      +'<div><div style="font-size:.58rem;color:#999;text-transform:uppercase;font-weight:700;">Punto</div>'
+      +'<div style="font-size:.75rem;font-weight:700;">'+pNombre+'</div></div>'
+      +'<div><div style="font-size:.58rem;color:#999;text-transform:uppercase;font-weight:700;">Turno</div>'
+      +'<div style="font-size:.75rem;font-weight:700;">'+tNombre+'</div></div>'
+      +'<div style="grid-column:1/-1;"><div style="font-size:.58rem;color:#999;text-transform:uppercase;font-weight:700;">Cajero(a)</div>'
+      +'<div style="font-size:.75rem;font-weight:700;">'+escH(cajeroStr)+'</div></div>'
+      +'</div>'
+      // Tabla
+      +'<table style="width:100%;border-collapse:collapse;">'
+      +'<thead><tr style="background:'+accentColor+';color:#fff;">'
+      +'<th style="padding:6px;text-align:left;font-size:.68rem;">PRODUCTO</th>'
+      +'<th style="padding:6px;text-align:center;font-size:.68rem;">DISP.</th>'
+      +'<th style="padding:6px;text-align:center;font-size:.68rem;">PEDIDO</th>'
+      +'<th style="padding:6px;text-align:center;font-size:.68rem;">ALISTADO ✓</th>'
+      +'</tr></thead>'
+      +'<tbody>'+buildTabla(accentColor,accentLight)+'</tbody>'
+      +'</table>'
+      // Firmas
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;">'
+      +'<div style="border-top:1.2px solid #bbb;padding-top:5px;">'
+      +'<div style="font-size:.58rem;color:#999;text-transform:uppercase;font-weight:700;">Resp. Producción</div>'
+      +'<div style="height:24px;"></div>'
+      +'<div style="font-size:.6rem;color:#ccc;border-top:1px dashed #ddd;padding-top:2px;">Firma</div>'
+      +'</div>'
+      +'<div style="border-top:1.2px solid #bbb;padding-top:5px;">'
+      +'<div style="font-size:.58rem;color:#999;text-transform:uppercase;font-weight:700;">Resp. Caja</div>'
+      +'<div style="height:24px;"></div>'
+      +'<div style="font-size:.6rem;color:#aaa;border-top:1px dashed #ddd;padding-top:2px;">'+escH(sesion.cajero)+'</div>'
+      +'</div>'
+      +'</div>'
+      // Pie copia
+      +'<div style="margin-top:8px;text-align:center;font-size:.58rem;color:#ccc;border-top:1px solid #eee;padding-top:5px;">'
+      +'Copia '+tipo+' · '+sesion.fecha+' '+horaStr
+      +'</div>'
+      +'</div></div>';
+  }
+
+  var html='<!DOCTYPE html><html><head><meta charset="utf-8">'
+    +'<title>Pedido '+pNombre+' '+sesion.fecha+'</title>'
+    +'<style>'
+    +'*{margin:0;padding:0;box-sizing:border-box;}'
+    +'body{font-family:"Segoe UI",Arial,sans-serif;background:#e8e8e8;}'
+    +'@media print{'
+    +'  body{background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
+    +'  .no-print{display:none!important;}'
+    +'  @page{size:A4 landscape;margin:8mm;}'
+    +'}'
+    +'</style>'
+    +'</head><body>'
+    +'<div class="no-print" style="text-align:center;padding:10px;background:#333;">'
+    +'<button onclick="window.print()" style="padding:9px 28px;background:#5a2d82;color:#fff;border:none;border-radius:6px;font-size:.9rem;font-weight:700;cursor:pointer;">🖨 Imprimir hoja doble</button>'
+    +'</div>'
+    // Contenedor hoja A4 landscape lado a lado
+    +'<div style="display:flex;width:277mm;min-height:185mm;margin:0 auto;background:#fff;">'
+    // Copia PRODUCCIÓN
+    +'<div style="flex:1;border-right:none;">'+buildCopiaHTML('PRODUCCIÓN')+'</div>'
+    // Línea de corte central
+    +'<div style="width:18px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:8px;background:#fff;flex-shrink:0;">'
+    +'<div style="writing-mode:vertical-rl;font-size:.55rem;color:#aaa;letter-spacing:2px;transform:rotate(180deg);margin-bottom:6px;">CORTAR</div>'
+    +tijeraSVG
+    +'<div style="flex:1;border-left:2px dashed #bbb;margin-top:4px;"></div>'
+    +'</div>'
+    // Copia CAJA
+    +'<div style="flex:1;border-left:none;">'+buildCopiaHTML('CAJA')+'</div>'
+    +'</div>'
+    +'</body></html>';
+
+  var w=window.open('','_blank','width=1100,height=800');
+  if(!w){alert('⚠ El navegador bloqueó la ventana emergente.\nActiva los popups para este sitio e intenta de nuevo.');return;}
+  w.document.write(html);
+  w.document.close();
 }
 
 function confirmarCierre(){
