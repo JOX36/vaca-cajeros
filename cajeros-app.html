@@ -1270,12 +1270,15 @@ function renderEntries(tipo){
   var totalId=tipo==='gastos'?'gastoTotal':'entregaTotal';
   var totalLabel=tipo==='gastos'?'Total gastos':'Total entregado';
   var list=document.getElementById(listId); list.innerHTML='';
+  // Solo lectura si: entregas y no admin, O turno cerrado y no admin
   var soloLecturaEntregas=(tipo==='entregas'&&!isAdmin);
+  var soloLecturaGastos=(tipo==='gastos'&&window._turnoCerrado&&!isAdmin);
+  var soloLectura=soloLecturaEntregas||soloLecturaGastos;
   arr.forEach(function(e,i){
     var row=document.createElement('div');
     row.style.cssText='display:flex;gap:5px;align-items:flex-start;margin-bottom:7px;';
-    if(soloLecturaEntregas){
-      // Cajero ve entregas en solo lectura con indicador de entrega final
+    if(soloLectura){
+      // Solo lectura: cajero ve gastos/entregas sin editar
       var lbl=document.createElement('div');
       lbl.style.cssText='flex:1;font-size:.82rem;color:var(--negro);padding:3px 0;';
       lbl.innerHTML='<div style="font-weight:500;">'+(e.desc||'Entrega')+(e.hora?' <span style="font-size:.65rem;color:var(--gris4);">⏱'+e.hora+'</span>':'')+'</div>'
