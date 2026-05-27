@@ -1655,7 +1655,9 @@ function abrirCierre(){
   var gas=gastos.reduce(function(s,e){return s+(e.valor||0);},0);
   var dat=parseFloat(document.getElementById('inDatafono')?document.getElementById('inDatafono').value:0)||0;
   var tra=parseFloat(document.getElementById('inTransferencia')?document.getElementById('inTransferencia').value:0)||0;
-  var ef=tv-gas-dat-tra-desc;
+  var desc=parseFloat(document.getElementById('inDescuentos')?document.getElementById('inDescuentos').value:0)||0;
+  var rappiTotal=invRows.reduce(function(s,r){return s+(r.rappi_venta||0);},0);
+  var ef=tv-gas-dat-tra-desc-rappiTotal;
   var dif=ent-ef;
   var pN={autopista:'Vaca Autopista',boquia:'Vaca Boquia',tebaida:'Vaca Tebaida',km25:'Vaca KM 25',km18:'Vaca KM 18',penon:'Vaca Peñón',colseguros:'Vaca Colseguros'}[sesion.punto];
   var tN=sesion.turno==='manana'?'☀ Mañana':sesion.turno==='tarde'?'🌙 Tarde':'⬛ Completo';
