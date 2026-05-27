@@ -1388,31 +1388,22 @@ function guardar(){
   setSyncStatus('sync','⟳ Guardando...');
   var key=sesion.fecha+'_'+sesion.punto+'_'+sesion.turno;
   var snap=invRows.map(function(r){return {id:r.id,name:r.name,precio:r.precio,ant:r.ant,entradas:r.entradas||[],entrante:r.entrante,dev:r.dev,rappi:r.rappi,inv_final:r.inv_final,pedido:r.pedido,disponible:r.disponible,vendido:r.vendido,rappi_venta:r.rappi_venta||0,total_venta:r.total_venta};});
-  sbGet('turnos_caja','turno_key=eq.'+key+'&select=cerrado&limit=1')
-    .then(function(rows){
-      if(rows&&rows.length&&rows[0].cerrado){
-        window._turnoCerrado=true;
-        setSyncStatus('ok','✓ Cerrado');
-        return;
-      }
-      sbUpsert('turnos_caja',{
-        turno_key:key,punto:sesion.punto,turno:sesion.turno,fecha:sesion.fecha,cajero:sesion.cajero,cajero_aux:sesion.cajeroAux||'',
-        snapshot:snap,
-        gastos_list:gastos,entregas_list:entregas,
-        datafono_val:parseFloat(document.getElementById('inDatafono').value)||0,
-        transferencia_val:parseFloat(document.getElementById('inTransferencia').value)||0,
-        descuentos_val:parseFloat(document.getElementById('inDescuentos')?document.getElementById('inDescuentos').value:0)||0,
-        gastos:gastos.reduce(function(s,e){return s+(e.valor||0);},0),
-        digital:(parseFloat(document.getElementById('inDatafono').value)||0)+(parseFloat(document.getElementById('inTransferencia').value)||0),
-        entregado:entregas.reduce(function(s,e){return s+(e.valor||0);},0),
-        nota:document.getElementById('inNota').value,
-        nota_siguiente:document.getElementById('inNotaSig')?document.getElementById('inNotaSig').value:'',
-        entrega_final:entregaFinal,
-        cerrado:false,updated_at:new Date().toISOString()
-      }).then(function(){setSyncStatus('ok','✓ Guardado');})
-      .catch(function(e){setSyncStatus('err','✗ Error');console.error(e);});
-    })
-    .catch(function(){setSyncStatus('err','✗ Sin conexión');});
+  sbUpsert('turnos_caja',{
+    turno_key:key,punto:sesion.punto,turno:sesion.turno,fecha:sesion.fecha,cajero:sesion.cajero,cajero_aux:sesion.cajeroAux||'',
+    snapshot:snap,
+    gastos_list:gastos,entregas_list:entregas,
+    datafono_val:parseFloat(document.getElementById('inDatafono').value)||0,
+    transferencia_val:parseFloat(document.getElementById('inTransferencia').value)||0,
+    descuentos_val:parseFloat(document.getElementById('inDescuentos')?document.getElementById('inDescuentos').value:0)||0,
+    gastos:gastos.reduce(function(s,e){return s+(e.valor||0);},0),
+    digital:(parseFloat(document.getElementById('inDatafono').value)||0)+(parseFloat(document.getElementById('inTransferencia').value)||0),
+    entregado:entregas.reduce(function(s,e){return s+(e.valor||0);},0),
+    nota:document.getElementById('inNota').value,
+    nota_siguiente:document.getElementById('inNotaSig')?document.getElementById('inNotaSig').value:'',
+    entrega_final:entregaFinal,
+    cerrado:false,updated_at:new Date().toISOString()
+  }).then(function(){setSyncStatus('ok','✓ Guardado');})
+  .catch(function(e){setSyncStatus('err','✗ Error');console.error(e);});
 }
 
 // ── ADMIN ────────────────────────────────────────
