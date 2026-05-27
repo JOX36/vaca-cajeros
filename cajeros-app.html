@@ -723,6 +723,8 @@ function showAdminUI(){
       if(bH) bH.style.display='none';
       var bPape=document.getElementById('btnPapelera');
       if(bPape) bPape.style.display='none';
+      var bFalt=document.getElementById('btnFaltantes');
+      if(bFalt) bFalt.style.display='none';
       var bDB=document.getElementById('btnDashboard');
       if(bDB) bDB.style.display='none';
       var bRes=document.getElementById('btnResumen');
@@ -861,7 +863,7 @@ function cargarInventario(){
             } else {
               antVal=sv.ant!==null&&sv.ant!==undefined?sv.ant:0; // Turno cerrado: respetar snapshot
             }
-            return {id:p.id,name:p.name,precio:p.precio||0,
+            return {id:p.id,name:p.name,precio:p.precio||sv.precio||0,precios:p.precios||{},
               ant:antVal,
               entradas:sv.entradas&&sv.entradas.length?sv.entradas:(sv.entrante?[sv.entrante]:[]),
               entrante:sv.entrante,dev:sv.dev,rappi:sv.rappi||null,inv_final:sv.inv_final,pedido:sv.pedido||null,
@@ -1387,23 +1389,33 @@ function guardar(){
   if(window._turnoCerrado){setSyncStatus('ok','✓');return;}
   setSyncStatus('sync','⟳ Guardando...');
   var key=sesion.fecha+'_'+sesion.punto+'_'+sesion.turno;
-  var snap=invRows.map(function(r){return {id:r.id,name:r.name,precio:r.precio,ant:r.ant,entradas:r.entradas||[],entrante:r.entrante,dev:r.dev,rappi:r.rappi,inv_final:r.inv_final,pedido:r.pedido,disponible:r.disponible,vendido:r.vendido,rappi_venta:r.rappi_venta||0,total_venta:r.total_venta};});
-  sbUpsert('turnos_caja',{
-    turno_key:key,punto:sesion.punto,turno:sesion.turno,fecha:sesion.fecha,cajero:sesion.cajero,cajero_aux:sesion.cajeroAux||'',
-    snapshot:snap,
-    gastos_list:gastos,entregas_list:entregas,
-    datafono_val:parseFloat(document.getElementById('inDatafono').value)||0,
-    transferencia_val:parseFloat(document.getElementById('inTransferencia').value)||0,
-    descuentos_val:parseFloat(document.getElementById('inDescuentos')?document.getElementById('inDescuentos').value:0)||0,
-    gastos:gastos.reduce(function(s,e){return s+(e.valor||0);},0),
-    digital:(parseFloat(document.getElementById('inDatafono').value)||0)+(parseFloat(document.getElementById('inTransferencia').value)||0),
-    entregado:entregas.reduce(function(s,e){return s+(e.valor||0);},0),
-    nota:document.getElementById('inNota').value,
-    nota_siguiente:document.getElementById('inNotaSig')?document.getElementById('inNotaSig').value:'',
-    entrega_final:entregaFinal,
-    cerrado:false,updated_at:new Date().toISOString()
-  }).then(function(){setSyncStatus('ok','✓ Guardado');})
-  .catch(function(e){setSyncStatus('err','✗ Error');console.error(e);});
+  // Verificar si el turno ya está cerrado en BD antes de upsertear
+  // (protege contra que un admin que entró sin haber cargado _turnoCerrado lo reabra)
+  sbGet('turnos_caja','turno_key=eq.'+key+'&select=cerrado&limit=1')
+    .then(function(arr){
+      var yaCerrado=arr&&arr.length&&arr[0].cerrado===true;
+      if(yaCerrado&&!isAdmin){
+        setSyncStatus('ok','✓');
+        return;
+      }
+      var snap=invRows.map(function(r){return {id:r.id,name:r.name,precio:r.precio,ant:r.ant,entradas:r.entradas||[],entrante:r.entrante,dev:r.dev,rappi:r.rappi,inv_final:r.inv_final,pedido:r.pedido,disponible:r.disponible,vendido:r.vendido,rappi_venta:r.rappi_venta||0,total_venta:r.total_venta};});
+      return sbUpsert('turnos_caja',{
+        turno_key:key,punto:sesion.punto,turno:sesion.turno,fecha:sesion.fecha,cajero:sesion.cajero,cajero_aux:sesion.cajeroAux||'',
+        snapshot:snap,
+        gastos_list:gastos,entregas_list:entregas,
+        datafono_val:parseFloat(document.getElementById('inDatafono').value)||0,
+        transferencia_val:parseFloat(document.getElementById('inTransferencia').value)||0,
+        descuentos_val:parseFloat(document.getElementById('inDescuentos')?document.getElementById('inDescuentos').value:0)||0,
+        gastos:gastos.reduce(function(s,e){return s+(e.valor||0);},0),
+        digital:(parseFloat(document.getElementById('inDatafono').value)||0)+(parseFloat(document.getElementById('inTransferencia').value)||0),
+        entregado:entregas.reduce(function(s,e){return s+(e.valor||0);},0),
+        nota:document.getElementById('inNota').value,
+        nota_siguiente:document.getElementById('inNotaSig')?document.getElementById('inNotaSig').value:'',
+        entrega_final:entregaFinal,
+        cerrado:yaCerrado===true,updated_at:new Date().toISOString()
+      });
+    }).then(function(){setSyncStatus('ok','✓ Guardado');})
+    .catch(function(e){setSyncStatus('err','✗ Error');console.error(e);});
 }
 
 // ── ADMIN ────────────────────────────────────────
@@ -1511,7 +1523,7 @@ function renderProdAdmin(){
       var chk=document.createElement('input'); chk.type='checkbox';
       chk.checked=(p.puntos||[]).indexOf(pt.id)!==-1;
       chk.addEventListener('change',(function(prod,ptId){return function(){
-        if(!prod.puntos) prod.puntos=['autopista','boquia','tebaida'];
+        if(!prod.puntos) prod.puntos=TODOS_PUNTOS.map(function(x){return x.id;});
         if(this.checked){
           if(prod.puntos.indexOf(ptId)===-1) prod.puntos.push(ptId);
         } else {
@@ -1576,7 +1588,7 @@ function saveAdmin(){
       return fetch(SB_URL+'/rest/v1/productos_caja?id=eq.'+p.id,{
         method:'PATCH',
         headers:Object.assign({},HEADS,{'Prefer':'return=minimal'}),
-        body:JSON.stringify({precio:p.precio,precios:p.precios||{},puntos:p.puntos||['autopista','boquia','tebaida'],orden:i,updated_at:new Date().toISOString()})
+        body:JSON.stringify({precio:p.precio,precios:p.precios||{},puntos:p.puntos||['autopista','boquia','tebaida','km25','km18','penon','colseguros'],orden:i,updated_at:new Date().toISOString()})
       }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t);});});
     }
   });
@@ -1591,7 +1603,9 @@ function saveAdmin(){
         .map(function(p){
           var pts=p.puntos;
           if(typeof pts==='string'){try{pts=JSON.parse(pts);}catch(e){pts=null;}}
-          return {id:p.id,name:p.name,precio:p.precio||0,
+          var prc=p.precios;
+          if(typeof prc==='string'){try{prc=JSON.parse(prc);}catch(e){prc=null;}}
+          return {id:p.id,name:p.name,precio:p.precio||0,precios:prc||{},
             puntos:Array.isArray(pts)&&pts.length?pts:['autopista','boquia','tebaida','km25','km18','penon','colseguros']};
         });
       invRows.forEach(function(r){
@@ -1886,6 +1900,7 @@ function imprimirTurno(){
   var gas=gastos.reduce(function(s,e){return s+(e.valor||0);},0);
   var dat=parseFloat(document.getElementById('inDatafono')?document.getElementById('inDatafono').value:0)||0;
   var tra=parseFloat(document.getElementById('inTransferencia')?document.getElementById('inTransferencia').value:0)||0;
+  var desc=parseFloat(document.getElementById('inDescuentos')?document.getElementById('inDescuentos').value:0)||0;
   var ent=entregas.reduce(function(s,e){return s+(e.valor||0);},0);
   var ef=tv-gas-dat-tra-rappiTotal-desc;
   var dif=ent-ef;
@@ -1949,7 +1964,7 @@ function imprimirTurno(){
     +'<div class="box"><div class="sec">Entregas efectivo</div>'+listaEntradas(entregas,true)+'<div class="rr" style="border-top:1px solid #ccc;margin-top:4px;padding-top:3px;"><b>Total</b><b>'+fmt(ent)+'</b></div></div>'
     +'</div>'
     +'<div class="rr" style="margin-top:7px;font-size:9pt;"><span>Total ventas</span><b>'+fmt(tv)+'</b></div>'
-    +'<div class="rr" style="font-size:9pt;"><span>− Gastos + Digital + Rappi</span><b>'+fmt(gas+dat+tra+rappiTotal)+'</b></div>'
+    +'<div class="rr" style="font-size:9pt;"><span>− Gastos + Digital + Rappi'+(desc>0?' + Desc.':'')+'</span><b>'+fmt(gas+dat+tra+rappiTotal+desc)+'</b></div>'
     +'<div class="rr big"><span>💵 Efectivo a entregar</span><b style="color:#7c4a1e">'+fmt(ef)+'</b></div>'
     +(ent>0?'<div class="rr"><span>Diferencia</span><b style="color:'+difCol+'">'+difTxt+'</b></div>':'')
     +(nota?'<div style="margin-top:5px;font-style:italic;font-size:8pt;color:#666;">📝 '+nota+'</div>':'')
@@ -2058,8 +2073,10 @@ function buscarFaltantes(){
       var conFaltante=[];
       turnos.forEach(function(t){
         var tv=(t.snapshot||[]).reduce(function(s,r){return s+(r.total_venta||0);},0);
+        var rap=(t.snapshot||[]).reduce(function(s,r){return s+(r.rappi_venta||0);},0);
         var gas=t.gastos||0; var dig=t.digital||0;
-        var ef=tv-gas-dig;
+        var desc=t.descuentos_val||0;
+        var ef=tv-gas-dig-rap-desc;
         var ent=t.entregado||0;
         var dif=ent-ef;
         if(dif>=0) return; // sin faltante
@@ -2239,15 +2256,16 @@ function guardarNuevoProducto(){
   if(!puntos.length){alert('Selecciona al menos un punto.');return;}
   document.getElementById('nuevoProdModal').classList.remove('open');
   var id='vta_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
+  var preciosObj={abc:precio,kpp:precio};
   setSyncStatus('sync','⟳ Guardando...');
   fetch(SB_URL+'/rest/v1/productos_caja',{
     method:'POST',
     headers:Object.assign({},HEADS,{'Prefer':'resolution=merge-duplicates'}),
-    body:JSON.stringify({id:id,name:name,precio:precio,puntos:puntos,orden:productos.length,updated_at:new Date().toISOString()})
+    body:JSON.stringify({id:id,name:name,precio:precio,precios:preciosObj,puntos:puntos,orden:productos.length,updated_at:new Date().toISOString()})
   }).then(function(r){
     if(!r.ok) return r.text().then(function(t){throw new Error(t);});
-    var nuevo={id:id,name:name,precio:precio,puntos:puntos,ant:0,entrante:null,dev:null,inv_final:null,pedido:null,disponible:0,vendido:0,total_venta:0};
-    productos.push({id:id,name:name,precio:precio,puntos:puntos});
+    var nuevo={id:id,name:name,precio:precio,precios:preciosObj,puntos:puntos,ant:0,entrante:null,dev:null,inv_final:null,pedido:null,disponible:0,vendido:0,total_venta:0};
+    productos.push({id:id,name:name,precio:precio,precios:preciosObj,puntos:puntos});
     if(puntos.indexOf(sesion.punto)!==-1) invRows.push(nuevo);
     buildTable();
     setSyncStatus('ok','✓ Producto agregado');
@@ -2370,18 +2388,18 @@ function exportarDetalleExcel(){
   sbGet('turnos_caja','fecha=gte.'+desde+'&fecha=lte.'+hasta+'&cerrado=eq.true&eliminado=eq.false&order=fecha.asc,punto.asc,turno.asc')
     .then(function(turnos){
       cargarSheetJS(function(){
-        var rows=[['Fecha','Punto','Turno','Cajero','Auxiliar','Total Ventas','Gastos','Datáfono','Transferencia','Rappi','Efectivo a Entregar','Total Entregado','Diferencia','Observaciones']];
+        var rows=[['Fecha','Punto','Turno','Cajero','Auxiliar','Total Ventas','Gastos','Datáfono','Transferencia','Descuentos','Rappi','Efectivo a Entregar','Total Entregado','Diferencia','Observaciones']];
         turnos.forEach(function(t){
           var tv=(t.snapshot||[]).reduce(function(s,r){return s+(r.total_venta||0);},0);
           var rap=(t.snapshot||[]).reduce(function(s,r){return s+(r.rappi_venta||0);},0);
-          var gas=t.gastos||0; var dat=t.datafono_val||0; var tra=t.transferencia_val||0; var desc=t.descuentos_val||0; var desc=t.descuentos_val||0;
-          var ef=tv-gas-dat-tra-rap; var ent=t.entregado||0; var dif=ent-ef;
+          var gas=t.gastos||0; var dat=t.datafono_val||0; var tra=t.transferencia_val||0; var desc=t.descuentos_val||0;
+          var ef=tv-gas-dat-tra-rap-desc; var ent=t.entregado||0; var dif=ent-ef;
           rows.push([t.fecha,pN[t.punto]||t.punto,tN[t.turno]||t.turno,t.cajero||'',t.cajero_aux||'',
-            fmt2(tv),fmt2(gas),fmt2(dat),fmt2(tra),fmt2(rap),fmt2(ef),fmt2(ent),fmt2(dif),t.nota||'']);
+            fmt2(tv),fmt2(gas),fmt2(dat),fmt2(tra),fmt2(desc),fmt2(rap),fmt2(ef),fmt2(ent),fmt2(dif),t.nota||'']);
         });
         var wb=XLSX.utils.book_new();
         var ws=XLSX.utils.aoa_to_sheet(rows);
-        ws['!cols']=[{wch:12},{wch:14},{wch:10},{wch:18},{wch:18},{wch:14},{wch:12},{wch:12},{wch:14},{wch:12},{wch:18},{wch:16},{wch:12},{wch:30}];
+        ws['!cols']=[{wch:12},{wch:14},{wch:10},{wch:18},{wch:18},{wch:14},{wch:12},{wch:12},{wch:14},{wch:12},{wch:12},{wch:18},{wch:16},{wch:12},{wch:30}];
         XLSX.utils.book_append_sheet(wb,ws,'Detalle Turnos');
         XLSX.writeFile(wb,'LaVaca_Detalle_'+desde+'_'+hasta+'.xlsx');
         setSyncStatus('ok','✓ Excel descargado');
@@ -2408,49 +2426,49 @@ function exportarResumenMensual(){
         var wb=XLSX.utils.book_new();
         var puntos=Object.keys(pN);
         // Hoja resumen general
-        var resRows=[['Resumen '+meses[mes]+' '+anio,'','','','','','','','',''],
-          ['Punto','Días activos','Total Ventas','Gastos','Datáfono','Transferencia','Rappi','Total Entregado','Faltantes','Sobrantes']];
-        var totGen={tv:0,gas:0,dat:0,tra:0,rap:0,ent:0,falt:0,sobr:0};
+        var resRows=[['Resumen '+meses[mes]+' '+anio,'','','','','','','','','',''],
+          ['Punto','Días activos','Total Ventas','Gastos','Datáfono','Transferencia','Descuentos','Rappi','Total Entregado','Faltantes','Sobrantes']];
+        var totGen={tv:0,gas:0,dat:0,tra:0,desc:0,rap:0,ent:0,falt:0,sobr:0};
         puntos.forEach(function(punto){
           var tp=turnos.filter(function(t){return t.punto===punto;});
           if(!tp.length) return;
-          var tv=0,gas=0,dat=0,tra=0,rap=0,ent=0,falt=0,sobr=0; var dias=new Set();
+          var tv=0,gas=0,dat=0,tra=0,desc=0,rap=0,ent=0,falt=0,sobr=0; var dias=new Set();
           tp.forEach(function(t){
             var ttv=(t.snapshot||[]).reduce(function(s,r){return s+(r.total_venta||0);},0);
             var trag=(t.snapshot||[]).reduce(function(s,r){return s+(r.rappi_venta||0);},0);
-            var tgas=t.gastos||0; var tdat=t.datafono_val||0; var ttra=t.transferencia_val||0;
-            var ef=ttv-tgas-tdat-ttra-trag; var tent=t.entregado||0; var dif=tent-ef;
-            tv+=ttv;gas+=tgas;dat+=tdat;tra+=ttra;rap+=trag;ent+=tent;
+            var tgas=t.gastos||0; var tdat=t.datafono_val||0; var ttra=t.transferencia_val||0; var tdesc=t.descuentos_val||0;
+            var ef=ttv-tgas-tdat-ttra-trag-tdesc; var tent=t.entregado||0; var dif=tent-ef;
+            tv+=ttv;gas+=tgas;dat+=tdat;tra+=ttra;desc+=tdesc;rap+=trag;ent+=tent;
             if(dif<0)falt+=Math.abs(dif);else if(dif>0)sobr+=dif;
             dias.add(t.fecha);
           });
-          resRows.push([pN[punto],dias.size,fmt2(tv),fmt2(gas),fmt2(dat),fmt2(tra),fmt2(rap),fmt2(ent),fmt2(falt),fmt2(sobr)]);
-          totGen.tv+=tv;totGen.gas+=gas;totGen.dat+=dat;totGen.tra+=tra;totGen.rap+=rap;totGen.ent+=ent;totGen.falt+=falt;totGen.sobr+=sobr;
+          resRows.push([pN[punto],dias.size,fmt2(tv),fmt2(gas),fmt2(dat),fmt2(tra),fmt2(desc),fmt2(rap),fmt2(ent),fmt2(falt),fmt2(sobr)]);
+          totGen.tv+=tv;totGen.gas+=gas;totGen.dat+=dat;totGen.tra+=tra;totGen.desc+=desc;totGen.rap+=rap;totGen.ent+=ent;totGen.falt+=falt;totGen.sobr+=sobr;
         });
-        resRows.push(['TOTALES','',fmt2(totGen.tv),fmt2(totGen.gas),fmt2(totGen.dat),fmt2(totGen.tra),fmt2(totGen.rap),fmt2(totGen.ent),fmt2(totGen.falt),fmt2(totGen.sobr)]);
+        resRows.push(['TOTALES','',fmt2(totGen.tv),fmt2(totGen.gas),fmt2(totGen.dat),fmt2(totGen.tra),fmt2(totGen.desc),fmt2(totGen.rap),fmt2(totGen.ent),fmt2(totGen.falt),fmt2(totGen.sobr)]);
         var wsRes=XLSX.utils.aoa_to_sheet(resRows);
-        wsRes['!cols']=[{wch:14},{wch:12},{wch:14},{wch:12},{wch:12},{wch:14},{wch:12},{wch:16},{wch:12},{wch:12}];
+        wsRes['!cols']=[{wch:14},{wch:12},{wch:14},{wch:12},{wch:12},{wch:14},{wch:12},{wch:12},{wch:16},{wch:12},{wch:12}];
         XLSX.utils.book_append_sheet(wb,wsRes,'Resumen General');
         // Hoja por punto
         puntos.forEach(function(punto){
           var tp=turnos.filter(function(t){return t.punto===punto;});
           if(!tp.length) return;
           var rows=[['Detalle '+pN[punto]+' — '+meses[mes]+' '+anio],
-            ['Fecha','Turno','Cajero','Auxiliar','Ventas','Gastos','Datáfono','Transferencia','Rappi','Ef.Entregar','Entregado','Diferencia','Observaciones']];
-          var tot={tv:0,gas:0,dat:0,tra:0,rap:0,ent:0,falt:0,sobr:0};
+            ['Fecha','Turno','Cajero','Auxiliar','Ventas','Gastos','Datáfono','Transferencia','Descuentos','Rappi','Ef.Entregar','Entregado','Diferencia','Observaciones']];
+          var tot={tv:0,gas:0,dat:0,tra:0,desc:0,rap:0,ent:0,falt:0,sobr:0};
           tp.forEach(function(t){
             var tv=(t.snapshot||[]).reduce(function(s,r){return s+(r.total_venta||0);},0);
             var rap=(t.snapshot||[]).reduce(function(s,r){return s+(r.rappi_venta||0);},0);
-            var gas=t.gastos||0; var dat=t.datafono_val||0; var tra=t.transferencia_val||0; var desc=t.descuentos_val||0; var desc=t.descuentos_val||0;
-            var ef=tv-gas-dat-tra-rap; var ent=t.entregado||0; var dif=ent-ef;
-            tot.tv+=tv;tot.gas+=gas;tot.dat+=dat;tot.tra+=tra;tot.rap+=rap;tot.ent+=ent;
+            var gas=t.gastos||0; var dat=t.datafono_val||0; var tra=t.transferencia_val||0; var desc=t.descuentos_val||0;
+            var ef=tv-gas-dat-tra-rap-desc; var ent=t.entregado||0; var dif=ent-ef;
+            tot.tv+=tv;tot.gas+=gas;tot.dat+=dat;tot.tra+=tra;tot.desc+=desc;tot.rap+=rap;tot.ent+=ent;
             if(dif<0)tot.falt+=Math.abs(dif);else if(dif>0)tot.sobr+=dif;
             rows.push([t.fecha,tN[t.turno]||t.turno,t.cajero||'',t.cajero_aux||'',
-              fmt2(tv),fmt2(gas),fmt2(dat),fmt2(tra),fmt2(rap),fmt2(ef),fmt2(ent),fmt2(dif),t.nota||'']);
+              fmt2(tv),fmt2(gas),fmt2(dat),fmt2(tra),fmt2(desc),fmt2(rap),fmt2(ef),fmt2(ent),fmt2(dif),t.nota||'']);
           });
-          rows.push(['TOTALES','','','',fmt2(tot.tv),fmt2(tot.gas),fmt2(tot.dat),fmt2(tot.tra),fmt2(tot.rap),'',fmt2(tot.ent),fmt2(tot.falt>0?-tot.falt:tot.sobr),'']);
+          rows.push(['TOTALES','','','',fmt2(tot.tv),fmt2(tot.gas),fmt2(tot.dat),fmt2(tot.tra),fmt2(tot.desc),fmt2(tot.rap),'',fmt2(tot.ent),fmt2(tot.falt>0?-tot.falt:tot.sobr),'']);
           var ws=XLSX.utils.aoa_to_sheet(rows);
-          ws['!cols']=[{wch:12},{wch:10},{wch:16},{wch:16},{wch:14},{wch:12},{wch:12},{wch:14},{wch:12},{wch:14},{wch:12},{wch:12},{wch:30}];
+          ws['!cols']=[{wch:12},{wch:10},{wch:16},{wch:16},{wch:14},{wch:12},{wch:12},{wch:14},{wch:12},{wch:12},{wch:14},{wch:12},{wch:12},{wch:30}];
           XLSX.utils.book_append_sheet(wb,ws,pN[punto]);
         });
         XLSX.writeFile(wb,'LaVaca_Resumen_'+meses[mes]+'_'+anio+'.xlsx');
@@ -2489,8 +2507,9 @@ function abrirDashboard(){
         var totalPunto=0,gastosPunto=0,difPunto=0;
         turnosPunto.forEach(function(t){
           var tv=(t.snapshot||[]).reduce(function(s,r){return s+(r.total_venta||0);},0);
-          var gas=t.gastos||0; var dig=t.digital||0;
-          var ef=tv-gas-dig; var ent=t.entregado||0; var dif=ent-ef;
+          var rap=(t.snapshot||[]).reduce(function(s,r){return s+(r.rappi_venta||0);},0);
+          var gas=t.gastos||0; var dig=t.digital||0; var desc=t.descuentos_val||0;
+          var ef=tv-gas-dig-rap-desc; var ent=t.entregado||0; var dif=ent-ef;
           totalPunto+=tv; gastosPunto+=gas; difPunto+=dif;
           totalVentasDia+=tv; totalGastosDia+=gas;
           if(dif<0) totalFaltantesDia+=Math.abs(dif);
@@ -2575,7 +2594,7 @@ function buscarHistorial(){
           var rap=(t.snapshot||[]).reduce(function(s,r){return s+(r.rappi_venta||0);},0);
           var gas=t.gastos||0;
           var dat=t.datafono_val||0; var tra=t.transferencia_val||0; var desc=t.descuentos_val||0;
-          var ef=tv-gas-dat-tra-rap;
+          var ef=tv-gas-dat-tra-rap-desc;
           var ent=(t.entregas_list||[]).reduce(function(s,e){return s+(e.valor||0);},0);
           var dif=ent-ef;
           var difTxt=dif===0?'✔ Cuadra':dif<0?'Falta '+fmt(Math.abs(dif)):'Sobran '+fmt(dif);
@@ -2629,8 +2648,8 @@ function exportarTurnoExcel(turnoKey){
         });
         var tv=(t.snapshot||[]).reduce(function(s,r){return s+(r.total_venta||0);},0);
         var rap=(t.snapshot||[]).reduce(function(s,r){return s+(r.rappi_venta||0);},0);
-        var gas=t.gastos||0; var dat=t.datafono_val||0; var tra=t.transferencia_val||0; var desc=t.descuentos_val||0; var desc=t.descuentos_val||0;
-        var ef=tv-gas-dat-tra-rap; var ent=t.entregado||0; var dif=ent-ef;
+        var gas=t.gastos||0; var dat=t.datafono_val||0; var tra=t.transferencia_val||0; var desc=t.descuentos_val||0;
+        var ef=tv-gas-dat-tra-rap-desc; var ent=t.entregado||0; var dif=ent-ef;
         invRows.push([]);
         invRows.push(['TOTALES','','','','','','','','',fmt2(tv)]);
         var wsInv=XLSX.utils.aoa_to_sheet(invRows);
@@ -2647,6 +2666,7 @@ function exportarTurnoExcel(turnoKey){
           ['Gastos',fmt2(gas)],
           ['Datáfono',fmt2(dat)],
           ['Transferencia',fmt2(tra)],
+          ['Descuentos',fmt2(desc)],
           ['Rappi',fmt2(rap)],
           ['Efectivo a Entregar',fmt2(ef)],
           ['Total Entregado',fmt2(ent)],
