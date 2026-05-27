@@ -1650,10 +1650,14 @@ function abrirCierre(){
     alert('❌ No se puede cerrar el turno.\n\nFaltan inventarios finales en:\n\n'+lista2+'\n\nDebes contar y registrar el inventario final de todos los productos con movimiento.');
     return;
   }
-  // Validar que haya entregas registradas
+  // Validar que haya entregas registradas — solo bloquear si es admin sin entregas
   var ent=entregas.reduce(function(s,e){return s+(e.valor||0);},0);
-  if(!entregas.length || ent<=0){
-    alert('❌ No se puede cerrar el turno.\n\nDebe registrar al menos una entrega de dinero en efectivo.\n\nSolicita al administrador que registre las entregas.');
+  if(isAdmin && (!entregas.length || ent<=0)){
+    alert('❌ No se puede cerrar el turno.\n\nDebes registrar al menos una entrega de dinero en efectivo antes de cerrar.');
+    return;
+  }
+  if(!isAdmin && (!entregas.length || ent<=0)){
+    alert('⚠ El turno aún no tiene entregas de dinero registradas.\n\nSolicita al administrador que registre las entregas antes de cerrar.');
     return;
   }
   var tv=invRows.reduce(function(s,r){return s+r.total_venta;},0);
@@ -1852,7 +1856,7 @@ function confirmarCierre(){
   });
   if(erroresConf.length){alert('❌ Hay productos con inventario final mayor al disponible. Corrige antes de cerrar.');return;}
   var entConf=entregas.reduce(function(s,e){return s+(e.valor||0);},0);
-  if(!entregas.length||entConf<=0){alert('❌ No hay entregas de dinero registradas. El admin debe registrar las entregas.');return;}
+  if(!entregas.length||entConf<=0){alert('❌ Registra al menos una entrega de dinero con valor mayor a cero antes de cerrar.');return;}
   document.getElementById('cierreModal').classList.remove('open');
   setSyncStatus('sync','⟳ Cerrando...');
   var key=sesion.fecha+'_'+sesion.punto+'_'+sesion.turno;
