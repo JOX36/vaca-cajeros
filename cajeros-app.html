@@ -2907,16 +2907,14 @@ function guardarEdicionTurno(){
   if(!turnoEditando) return;
   setSyncStatus('sync','⟳ Guardando...');
   var snap=turnoEditando.snapshot||[];
-  // Recalcular todo usando precio actual del producto si está disponible
+  // Recalcular usando el precio ORIGINAL del snapshot (no el precio actual)
+  // para que los totales históricos no cambien si hubo cambio de precio posterior
   snap.forEach(function(r){
-    var prodActual=productos.find(function(p){return p.id===r.id;});
-    var precioActual=prodActual?getPrecio(prodActual,turnoEditando.punto):(r.precio||0);
-    r.precio=precioActual;
     var disp=(r.ant||0)+(r.entrante||0)-(r.dev||0);
     r.disponible=disp;
-    r.rappi_venta=(r.rappi||0)*precioActual;
+    r.rappi_venta=(r.rappi||0)*(r.precio||0);
     r.vendido=r.inv_final!==null&&r.inv_final!==undefined?Math.max(0,disp-(r.inv_final||0)):0;
-    r.total_venta=(r.vendido+( r.rappi||0))*precioActual;
+    r.total_venta=(r.vendido+(r.rappi||0))*(r.precio||0);
   });
   var dat=parseFloat(document.getElementById('editDatafono').value)||0;
   var tra=parseFloat(document.getElementById('editTransferencia').value)||0;
