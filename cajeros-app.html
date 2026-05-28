@@ -701,6 +701,9 @@ function showAdminUI(){
   if(btnRes) btnRes.style.display='flex';
   var btnEC=document.getElementById('btnEditCajero');
   if(btnEC) btnEC.style.display='inline-flex';
+  // btnCerrar visible si turno no cerrado
+  var btnC=document.getElementById('btnCerrar');
+  if(btnC&&!window._turnoCerrado) btnC.style.display='flex';
   renderEntries('entregas');
   buildTable();
   // Timer 5 minutos
@@ -2904,18 +2907,23 @@ function guardarEdicionTurno(){
   if(!turnoEditando) return;
   setSyncStatus('sync','⟳ Guardando...');
   var snap=turnoEditando.snapshot||[];
-  // Recalcular todo
+  // Recalcular todo usando precio actual del producto si está disponible
   snap.forEach(function(r){
+    var prodActual=productos.find(function(p){return p.id===r.id;});
+    var precioActual=prodActual?getPrecio(prodActual,turnoEditando.punto):(r.precio||0);
+    r.precio=precioActual;
     var disp=(r.ant||0)+(r.entrante||0)-(r.dev||0);
     r.disponible=disp;
+    r.rappi_venta=(r.rappi||0)*precioActual;
     r.vendido=r.inv_final!==null&&r.inv_final!==undefined?Math.max(0,disp-(r.inv_final||0)):0;
-    r.total_venta=r.vendido*(r.precio||0);
+    r.total_venta=(r.vendido+( r.rappi||0))*precioActual;
   });
   var dat=parseFloat(document.getElementById('editDatafono').value)||0;
   var tra=parseFloat(document.getElementById('editTransferencia').value)||0;
   var desc=parseFloat(document.getElementById('editDescuentos')?document.getElementById('editDescuentos').value:0)||0;
   var nota=document.getElementById('editNota').value;
   var tv=snap.reduce(function(s,r){return s+(r.total_venta||0);},0);
+  var rap=snap.reduce(function(s,r){return s+(r.rappi_venta||0);},0);
   var gas=(turnoEditando.gastos_list||[]).reduce(function(s,e){return s+(e.valor||0);},0);
   var ent=(turnoEditando.entregas_list||[]).reduce(function(s,e){return s+(e.valor||0);},0);
   var payload={
@@ -2926,7 +2934,8 @@ function guardarEdicionTurno(){
     gastos:gas, digital:dat+tra, entregado:ent,
     cajero:turnoEditando.cajero,
     cajero_aux:turnoEditando.cajero_aux||'',
-    nota:nota, cerrado:true,
+    nota:nota,
+    cerrado:turnoEditando.cerrado===true, // preservar estado original, no forzar cerrado
     eliminado:turnoEditando.eliminado||false,
     updated_at:new Date().toISOString()
   };
