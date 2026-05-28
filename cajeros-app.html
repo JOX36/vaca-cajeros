@@ -904,7 +904,12 @@ function cargarInventario(){
               ant:antVal,
               entradas:sv.entradas&&sv.entradas.length?sv.entradas:(sv.entrante?[sv.entrante]:[]),
               entrante:sv.entrante,dev:sv.dev,rappi:sv.rappi||null,inv_final:sv.inv_final,pedido:sv.pedido||null,
-              disponible:0,vendido:0,total_venta:0};
+              // Turno cerrado: usar valores guardados (pueden haber sido corregidos por admin)
+              // Turno abierto: dejar en 0 para que recalc() los calcule
+              disponible: saved.cerrado ? (sv.disponible||0) : 0,
+              vendido:    saved.cerrado ? (sv.vendido||0)    : 0,
+              rappi_venta:saved.cerrado ? (sv.rappi_venta||0): 0,
+              total_venta:saved.cerrado ? (sv.total_venta||0): 0};
           });
         } else {
           // Turno nuevo: usar productosPunto con inv_final del turno anterior
@@ -1260,6 +1265,15 @@ function mkInp(r,field,borderColor){
 }
 
 function calcFila(r){
+  // Si el turno está cerrado, los valores ya vienen correctos del snapshot guardado
+  // (pueden haber sido corregidos por admin desde el historial - no recalcular)
+  if(window._turnoCerrado){
+    // Solo recalcular entrante desde array si es necesario para mostrar
+    if(r.entradas&&r.entradas.length){
+      r.entrante=r.entradas.reduce(function(s,v){return s+v;},0);
+    }
+    return;
+  }
   // Calcular entrante desde array acumulado
   if(r.entradas&&r.entradas.length){
     r.entrante=r.entradas.reduce(function(s,v){return s+v;},0);
