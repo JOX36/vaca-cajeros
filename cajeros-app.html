@@ -2958,6 +2958,50 @@ function guardarEdicionTurno(){
     body:JSON.stringify(payload)
   }).then(function(r){
     if(!r.ok) return r.text().then(function(t){throw new Error(t);});
+    // ── Actualizar ant del turno siguiente si existe ──
+    // El inv_final de este turno es el ant del siguiente del mismo punto
+    var turnoOrden={manana:0,tarde:1,completo:2};
+    var puntoKey=turnoEditando.punto;
+    var fechaKey=turnoEditando.fecha;
+    var turnoActual=turnoEditando.turno;
+    // Calcular qué turno sigue
+    var siguiente=null;
+    if(turnoActual==='manana') siguiente={fecha:fechaKey,turno:'tarde'};
+    else if(turnoActual==='tarde') siguiente={fecha:fechaKey,turno:'completo'};
+    else {
+      // completo o tarde sin siguiente en el día: buscar mañana del día siguiente
+      var d=new Date(fechaKey+'T12:00:00');
+      d.setDate(d.getDate()+1);
+      siguiente={fecha:d.toISOString().slice(0,10),turno:'manana'};
+    }
+    var sigKey=siguiente.fecha+'_'+puntoKey+'_'+siguiente.turno;
+    return sbGet('turnos_caja','turno_key=eq.'+sigKey+'&select=turno_key,snapshot,cerrado&limit=1')
+      .then(function(arr){
+        if(!arr||!arr.length) return; // no hay turno siguiente
+        var sigTurno=arr[0];
+        if(!sigTurno.snapshot||!sigTurno.snapshot.length) return;
+        // Mapear inv_final de este turno → ant del siguiente
+        var invFinalMap={};
+        snap.forEach(function(r){ invFinalMap[r.id]=r.inv_final!==null&&r.inv_final!==undefined?r.inv_final:r.disponible; });
+        var sigSnap=sigTurno.snapshot.map(function(sr){
+          if(invFinalMap[sr.id]!==undefined){
+            sr.ant=invFinalMap[sr.id];
+            // Recalcular disponible y vendido del siguiente turno con el nuevo ant
+            var disp=(sr.ant||0)+(sr.entrante||0)-(sr.dev||0);
+            sr.disponible=disp;
+            sr.vendido=sr.inv_final!==null&&sr.inv_final!==undefined?Math.max(0,disp-(sr.inv_final||0)):0;
+            sr.total_venta=(sr.vendido+(sr.rappi||0))*(sr.precio||0);
+            sr.rappi_venta=(sr.rappi||0)*(sr.precio||0);
+          }
+          return sr;
+        });
+        return fetch(SB_URL+'/rest/v1/turnos_caja?turno_key=eq.'+encodeURIComponent(sigKey),{
+          method:'PATCH',
+          headers:Object.assign({},HEADS,{'Prefer':'return=minimal'}),
+          body:JSON.stringify({snapshot:sigSnap,updated_at:new Date().toISOString()})
+        });
+      });
+  }).then(function(){
     setSyncStatus('ok','✓ Turno actualizado correctamente');
     document.getElementById('editTurnoModal').classList.remove('open');
     document.getElementById('historialModal').classList.add('open');
