@@ -779,18 +779,52 @@ function entrar(admin){
 
 function salir(){
   if(!confirm('¿Salir?'))return;
-  sesion=null; isAdmin=false; invRows=[]; gastos=[]; entregas=[]; entregaFinal=false; window._turnoCerrado=false;
-  clearInterval(adminTimer);
-  document.getElementById('adminBadge').style.display='none';
-  var f=document.getElementById('fabAddProd'); if(f) f.style.display='none';
-  var bH=document.getElementById('btnHistorial'); if(bH) bH.style.display='none';
-  var bPape=document.getElementById('btnPapelera'); if(bPape) bPape.style.display='none';
-  var bFalt=document.getElementById('btnFaltantes'); if(bFalt) bFalt.style.display='none';
-  var bDB=document.getElementById('btnDashboard'); if(bDB) bDB.style.display='none';
-  var bRes=document.getElementById('btnResumen'); if(bRes) bRes.style.display='none';
-  var bEC=document.getElementById('btnEditCajero'); if(bEC) bEC.style.display='none';
-  document.getElementById('loginScreen').style.display='flex';
-  document.getElementById('appScreen').style.display='none';
+  // Cancelar autoSave pendiente
+  clearTimeout(saveTimer);
+
+  function limpiarUI(){
+    sesion=null; isAdmin=false; invRows=[]; gastos=[]; entregas=[]; entregaFinal=false; window._turnoCerrado=false;
+    clearInterval(adminTimer);
+    document.getElementById('adminBadge').style.display='none';
+    var f=document.getElementById('fabAddProd'); if(f) f.style.display='none';
+    var bH=document.getElementById('btnHistorial'); if(bH) bH.style.display='none';
+    var bPape=document.getElementById('btnPapelera'); if(bPape) bPape.style.display='none';
+    var bFalt=document.getElementById('btnFaltantes'); if(bFalt) bFalt.style.display='none';
+    var bDB=document.getElementById('btnDashboard'); if(bDB) bDB.style.display='none';
+    var bRes=document.getElementById('btnResumen'); if(bRes) bRes.style.display='none';
+    var bEC=document.getElementById('btnEditCajero'); if(bEC) bEC.style.display='none';
+    var bC=document.getElementById('btnCerrar'); if(bC) bC.style.display='none';
+    document.getElementById('loginScreen').style.display='flex';
+    document.getElementById('appScreen').style.display='none';
+  }
+
+  // Si no hay sesión activa o está cerrado, salir directo
+  if(!sesion || window._turnoCerrado){ limpiarUI(); return; }
+
+  // Guardar con keepalive antes de salir (garantiza que el fetch se complete aunque se cambie de pantalla)
+  var key=sesion.fecha+'_'+sesion.punto+'_'+sesion.turno;
+  var snap=invRows.map(function(r){return {id:r.id,name:r.name,precio:r.precio,ant:r.ant,entradas:r.entradas||[],entrante:r.entrante,dev:r.dev,rappi:r.rappi,inv_final:r.inv_final,pedido:r.pedido,disponible:r.disponible,vendido:r.vendido,rappi_venta:r.rappi_venta||0,total_venta:r.total_venta};});
+  var payload=JSON.stringify({
+    turno_key:key,punto:sesion.punto,turno:sesion.turno,fecha:sesion.fecha,cajero:sesion.cajero,cajero_aux:sesion.cajeroAux||'',
+    snapshot:snap,
+    gastos_list:gastos,entregas_list:entregas,
+    datafono_val:parseFloat(document.getElementById('inDatafono').value)||0,
+    transferencia_val:parseFloat(document.getElementById('inTransferencia').value)||0,
+    descuentos_val:parseFloat(document.getElementById('inDescuentos')?document.getElementById('inDescuentos').value:0)||0,
+    gastos:gastos.reduce(function(s,e){return s+(e.valor||0);},0),
+    digital:(parseFloat(document.getElementById('inDatafono').value)||0)+(parseFloat(document.getElementById('inTransferencia').value)||0),
+    entregado:entregas.reduce(function(s,e){return s+(e.valor||0);},0),
+    nota:document.getElementById('inNota').value,
+    nota_siguiente:document.getElementById('inNotaSig')?document.getElementById('inNotaSig').value:'',
+    entrega_final:entregaFinal,
+    cerrado:false,updated_at:new Date().toISOString()
+  });
+  fetch(SB_URL+'/rest/v1/turnos_caja',{
+    method:'POST',
+    headers:Object.assign({},HEADS,{'Prefer':'resolution=merge-duplicates'}),
+    body:payload,
+    keepalive:true  // sobrevive al cambio de pantalla en móvil
+  }).catch(function(){}).finally(function(){ limpiarUI(); });
 }
 
 // ── CARGA ────────────────────────────────────────
@@ -928,6 +962,15 @@ function cargarInventario(){
           },800);
         } else {
           window._turnoCerrado=false;
+        }
+        // Mostrar/ocultar btnCerrar según estado del turno
+        var btnCerrarEl=document.getElementById('btnCerrar');
+        if(btnCerrarEl){
+          if(saved && saved.cerrado){
+            btnCerrarEl.style.display='none';
+          } else {
+            btnCerrarEl.style.display='flex';
+          }
         }
         buildTable(); renderAllEntries(); recalc();
         // Nota del compañero solo si es turno nuevo (no existe guardado aún)
@@ -1272,7 +1315,8 @@ function renderEntries(tipo){
   var totalId=tipo==='gastos'?'gastoTotal':'entregaTotal';
   var totalLabel=tipo==='gastos'?'Total gastos':'Total entregado';
   var list=document.getElementById(listId); list.innerHTML='';
-  // Solo lectura si: entregas y no admin, O turno cerrado y no admin
+  // Entregas: solo admin puede ver inputs y editar. Cajero ve solo lectura.
+  // Gastos: cajero puede editar si turno abierto. Solo lectura si turno cerrado.
   var soloLecturaEntregas=(tipo==='entregas'&&!isAdmin);
   var soloLecturaGastos=(tipo==='gastos'&&window._turnoCerrado&&!isAdmin);
   var soloLectura=soloLecturaEntregas||soloLecturaGastos;
