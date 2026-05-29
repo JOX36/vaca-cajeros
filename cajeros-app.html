@@ -2832,6 +2832,57 @@ function abrirEditarTurno(t){
     calcEditTotales();
   });
   secInv.appendChild(tbl);
+
+  // ── Productos nuevos no incluidos en este snapshot ──
+  var snapIds=snap.map(function(r){return r.id;});
+  var prodsFaltantes=productos.filter(function(p){
+    return snapIds.indexOf(p.id)===-1
+      && p.puntos && p.puntos.indexOf(turnoEditando.punto)!==-1;
+  });
+  if(prodsFaltantes.length){
+    var divNew=document.createElement('div');
+    divNew.style.cssText='margin-top:8px;padding:7px 8px;background:#fffbe6;border:1.5px dashed #c8a000;border-radius:6px;';
+    divNew.innerHTML='<div style="font-size:.72rem;font-weight:700;color:#7a6000;margin-bottom:6px;">⚠ Productos nuevos no registrados en este turno — puedes agregarlos:</div>';
+    prodsFaltantes.forEach(function(p){
+      var row=document.createElement('div');
+      row.style.cssText='display:flex;align-items:center;gap:6px;margin-bottom:5px;flex-wrap:wrap;';
+      row.innerHTML='<span style="flex:1;min-width:100px;font-size:.78rem;font-weight:600;">'+escH(p.name)+'</span>'
+        +'<label style="font-size:.7rem;color:#888;">Ant</label><input type="number" placeholder="0" min="0" style="width:50px;padding:2px 4px;border:1.5px solid #ccc;border-radius:4px;font-size:.74rem;text-align:center;" data-newprod="'+p.id+'" data-field="ant">'
+        +'<label style="font-size:.7rem;color:#888;">Entr</label><input type="number" placeholder="0" min="0" style="width:50px;padding:2px 4px;border:1.5px solid #ccc;border-radius:4px;font-size:.74rem;text-align:center;" data-newprod="'+p.id+'" data-field="entrante">'
+        +'<label style="font-size:.7rem;color:#888;">Final</label><input type="number" placeholder="0" min="0" style="width:50px;padding:2px 4px;border:1.5px solid #6a90d0;border-radius:4px;font-size:.74rem;text-align:center;" data-newprod="'+p.id+'" data-field="inv_final">'
+        +'<button data-addprod="'+p.id+'" style="padding:3px 9px;background:#5a8a2a;color:#fff;border:none;border-radius:4px;font-size:.74rem;cursor:pointer;">＋ Agregar</button>';
+      divNew.appendChild(row);
+    });
+    // Al hacer clic en Agregar, insertar el producto en el snapshot
+    divNew.addEventListener('click',function(e){
+      var btn=e.target.closest('[data-addprod]');
+      if(!btn) return;
+      var pid=btn.dataset.addprod;
+      var p=productos.find(function(x){return x.id===pid;});
+      if(!p) return;
+      var rowEl=btn.closest('div');
+      var antVal=parseFloat(rowEl.querySelector('[data-field="ant"]').value)||0;
+      var entrVal=parseFloat(rowEl.querySelector('[data-field="entrante"]').value)||0;
+      var finalVal=rowEl.querySelector('[data-field="inv_final"]').value;
+      finalVal=finalVal===''?null:parseFloat(finalVal)||0;
+      var precioP=getPrecio(p,turnoEditando.punto);
+      var disp=antVal+entrVal;
+      var vendido=finalVal!==null?Math.max(0,disp-finalVal):0;
+      var newRow={id:p.id,name:p.name,precio:precioP,precios:p.precios||{},
+        ant:antVal,entrante:entrVal,entradas:entrVal?[entrVal]:[],dev:0,
+        rappi:null,inv_final:finalVal,pedido:null,
+        disponible:disp,vendido:vendido,rappi_venta:0,
+        total_venta:vendido*precioP};
+      turnoEditando.snapshot.push(newRow);
+      // Quitar de la lista de faltantes y regenerar el editor
+      btn.closest('div[data-newprod], div').style.opacity='0.4';
+      btn.disabled=true; btn.textContent='✓ Agregado';
+      // Regenerar tabla principal con el nuevo producto
+      abrirEditarTurno(turnoEditando);
+    });
+    secInv.appendChild(divNew);
+  }
+
   body.appendChild(secInv);
 
   // ── Gastos ──
