@@ -585,6 +585,7 @@ var isAdmin = false;
 var productos = [];
 var invRows = [];
 var saveTimer = null;
+var syncCheckTimer = null; // verifica periódicamente si el turno fue cerrado por otro dispositivo
 var gastos = [];
 var entregas = [];
 var entregaFinal = false;
@@ -788,6 +789,8 @@ function salir(){
   function limpiarUI(){
     sesion=null; isAdmin=false; invRows=[]; gastos=[]; entregas=[]; entregaFinal=false; window._turnoCerrado=false;
     clearInterval(adminTimer);
+    clearInterval(syncCheckTimer);
+    clearTimeout(saveTimer);
     document.getElementById('adminBadge').style.display='none';
     var f=document.getElementById('fabAddProd'); if(f) f.style.display='none';
     var bH=document.getElementById('btnHistorial'); if(bH) bH.style.display='none';
@@ -797,6 +800,7 @@ function salir(){
     var bRes=document.getElementById('btnResumen'); if(bRes) bRes.style.display='none';
     var bEC=document.getElementById('btnEditCajero'); if(bEC) bEC.style.display='none';
     var bC=document.getElementById('btnCerrar'); if(bC) bC.style.display='none';
+    var bAE=document.getElementById('btnAddEntrega'); if(bAE) bAE.style.display='none';
     document.getElementById('loginScreen').style.display='flex';
     document.getElementById('appScreen').style.display='none';
   }
@@ -953,21 +957,20 @@ function cargarInventario(){
           },150);
         }
         // Si el turno ya fue cerrado, bloquearlo
-        if(saved && saved.cerrado && !isAdmin){
+        if(saved && saved.cerrado){
           window._turnoCerrado=true;
-          // Turno cerrado: mostrar todos los valores (ya no hay nada que ocultar)
           entregaFinal=true;
-          // Bloquear campos de resumen
-          var inDat=document.getElementById('inDatafono'); if(inDat){inDat.readOnly=true;inDat.style.background='#f0f0f0';}
-          var inTra=document.getElementById('inTransferencia'); if(inTra){inTra.readOnly=true;inTra.style.background='#f0f0f0';}
-          var inDesc=document.getElementById('inDescuentos'); if(inDesc){inDesc.readOnly=true;inDesc.style.background='#f0f0f0';}
-          var inNota=document.getElementById('inNota'); if(inNota){inNota.readOnly=true;inNota.style.background='#f0f0f0';}
-          var inNotaSig=document.getElementById('inNotaSig'); if(inNotaSig){inNotaSig.readOnly=true;inNotaSig.style.background='#f0f0f0';}
-          var btnGas=document.getElementById('btnAddGasto'); if(btnGas) btnGas.style.display='none';
-          var btnCerrar=document.getElementById('btnCerrar'); if(btnCerrar) btnCerrar.style.display='none';
-          setTimeout(function(){
-            alert('⚠️ Este turno ya fue cerrado. Solo puedes consultarlo.');
-          },800);
+          if(!isAdmin){
+            // Cajero: bloquear campos de resumen
+            var inDat=document.getElementById('inDatafono'); if(inDat){inDat.readOnly=true;inDat.style.background='#f0f0f0';}
+            var inTra=document.getElementById('inTransferencia'); if(inTra){inTra.readOnly=true;inTra.style.background='#f0f0f0';}
+            var inDesc=document.getElementById('inDescuentos'); if(inDesc){inDesc.readOnly=true;inDesc.style.background='#f0f0f0';}
+            var inNota=document.getElementById('inNota'); if(inNota){inNota.readOnly=true;inNota.style.background='#f0f0f0';}
+            var inNotaSig=document.getElementById('inNotaSig'); if(inNotaSig){inNotaSig.readOnly=true;inNotaSig.style.background='#f0f0f0';}
+            var btnGas=document.getElementById('btnAddGasto'); if(btnGas) btnGas.style.display='none';
+            var btnCerrar=document.getElementById('btnCerrar'); if(btnCerrar) btnCerrar.style.display='none';
+            setTimeout(function(){alert('⚠️ Este turno ya fue cerrado. Solo puedes consultarlo.');},800);
+          }
         } else {
           window._turnoCerrado=false;
         }
@@ -981,6 +984,7 @@ function cargarInventario(){
           }
         }
         buildTable(); renderAllEntries(); recalc();
+        clearInterval(syncCheckTimer);
         // Nota del compañero solo si es turno nuevo (no existe guardado aún)
         if(!saved&&antTurno&&antTurno.nota_siguiente&&antTurno.nota_siguiente.trim()){
           setTimeout(function(){mostrarNotaCompañero(antTurno.nota_siguiente);},600);
@@ -1450,20 +1454,39 @@ function guardar(){
   if(window._turnoCerrado){setSyncStatus('ok','✓');return;}
   setSyncStatus('sync','⟳ Guardando...');
   var key=sesion.fecha+'_'+sesion.punto+'_'+sesion.turno;
-  // Verificar si el turno ya está cerrado en BD antes de upsertear
-  // (protege contra que un admin que entró sin haber cargado _turnoCerrado lo reabra)
-  sbGet('turnos_caja','turno_key=eq.'+key+'&select=cerrado&limit=1')
-    .then(function(arr){
-      var yaCerrado=arr&&arr.length&&arr[0].cerrado===true;
-      if(yaCerrado&&!isAdmin){
-        setSyncStatus('ok','✓');
-        return;
-      }
-      var snap=invRows.map(function(r){return {id:r.id,name:r.name,precio:r.precio,ant:r.ant,entradas:r.entradas||[],entrante:r.entrante,dev:r.dev,rappi:r.rappi,inv_final:r.inv_final,pedido:r.pedido,disponible:r.disponible,vendido:r.vendido,rappi_venta:r.rappi_venta||0,total_venta:r.total_venta};});
+  var snap=invRows.map(function(r){return {id:r.id,name:r.name,precio:r.precio,ant:r.ant,entradas:r.entradas||[],entrante:r.entrante,dev:r.dev,rappi:r.rappi,inv_final:r.inv_final,pedido:r.pedido,disponible:r.disponible,vendido:r.vendido,rappi_venta:r.rappi_venta||0,total_venta:r.total_venta};});
+  // PATCH con filtro cerrado=eq.false — si otro dispositivo cerró el turno,
+  // Supabase no actualiza ninguna fila y lo detectamos por el header content-range
+  fetch(SB_URL+'/rest/v1/turnos_caja?turno_key=eq.'+encodeURIComponent(key)+'&cerrado=eq.false',{
+    method:'PATCH',
+    headers:Object.assign({},HEADS,{'Prefer':'return=minimal,count=exact'}),
+    body:JSON.stringify({
+      cajero:sesion.cajero,cajero_aux:sesion.cajeroAux||'',
+      snapshot:snap,gastos_list:gastos,entregas_list:entregas,
+      datafono_val:parseFloat(document.getElementById('inDatafono').value)||0,
+      transferencia_val:parseFloat(document.getElementById('inTransferencia').value)||0,
+      descuentos_val:parseFloat(document.getElementById('inDescuentos')?document.getElementById('inDescuentos').value:0)||0,
+      gastos:gastos.reduce(function(s,e){return s+(e.valor||0);},0),
+      digital:(parseFloat(document.getElementById('inDatafono').value)||0)+(parseFloat(document.getElementById('inTransferencia').value)||0),
+      entregado:entregas.reduce(function(s,e){return s+(e.valor||0);},0),
+      nota:document.getElementById('inNota').value,
+      nota_siguiente:document.getElementById('inNotaSig')?document.getElementById('inNotaSig').value:'',
+      entrega_final:entregaFinal,
+      updated_at:new Date().toISOString()
+    })
+  }).then(function(r){
+    if(!r.ok) return r.text().then(function(t){throw new Error(t);});
+    // Verificar si actualizó alguna fila
+    // Content-Range: 0-0/1 → actualizó | Content-Range: */0 → no actualizó (turno cerrado o no existe)
+    var cr=r.headers.get('content-range')||'';
+    var count=r.headers.get('x-error')||'';
+    if(cr==='*/0'){
+      // Puede ser turno nuevo (aún no existe) o turno cerrado por otro dispositivo
+      // Intentar insertar nuevo turno
       return sbUpsert('turnos_caja',{
-        turno_key:key,punto:sesion.punto,turno:sesion.turno,fecha:sesion.fecha,cajero:sesion.cajero,cajero_aux:sesion.cajeroAux||'',
-        snapshot:snap,
-        gastos_list:gastos,entregas_list:entregas,
+        turno_key:key,punto:sesion.punto,turno:sesion.turno,fecha:sesion.fecha,
+        cajero:sesion.cajero,cajero_aux:sesion.cajeroAux||'',
+        snapshot:snap,gastos_list:gastos,entregas_list:entregas,
         datafono_val:parseFloat(document.getElementById('inDatafono').value)||0,
         transferencia_val:parseFloat(document.getElementById('inTransferencia').value)||0,
         descuentos_val:parseFloat(document.getElementById('inDescuentos')?document.getElementById('inDescuentos').value:0)||0,
@@ -1472,11 +1495,24 @@ function guardar(){
         entregado:entregas.reduce(function(s,e){return s+(e.valor||0);},0),
         nota:document.getElementById('inNota').value,
         nota_siguiente:document.getElementById('inNotaSig')?document.getElementById('inNotaSig').value:'',
-        entrega_final:entregaFinal,
-        cerrado:yaCerrado===true,updated_at:new Date().toISOString()
+        entrega_final:entregaFinal,cerrado:false,updated_at:new Date().toISOString()
+      }).then(function(res){
+        // Si el upsert tampoco hace nada (conflicto con cerrado:true), detectar cierre externo
+        if(res&&res.length===0){
+          sbGet('turnos_caja','turno_key=eq.'+key+'&select=cerrado&limit=1').then(function(arr){
+            if(arr&&arr.length&&arr[0].cerrado===true){
+              window._turnoCerrado=true;
+              clearTimeout(saveTimer);
+              var btnC=document.getElementById('btnCerrar'); if(btnC) btnC.style.display='none';
+              setSyncStatus('ok','🔒 Cerrado');
+              alert('⚠️ Este turno fue cerrado por otro dispositivo.\nEl inventario queda en modo solo lectura.');
+            }
+          });
+        }
       });
-    }).then(function(){setSyncStatus('ok','✓ Guardado');})
-    .catch(function(e){setSyncStatus('err','✗ Error');console.error(e);});
+    }
+  }).then(function(){setSyncStatus('ok','✓ Guardado');})
+  .catch(function(e){setSyncStatus('err','✗ Error');console.error(e);});
 }
 
 // ── ADMIN ────────────────────────────────────────
@@ -1716,14 +1752,10 @@ function abrirCierre(){
     alert('❌ No se puede cerrar el turno.\n\nFaltan inventarios finales en:\n\n'+lista2+'\n\nDebes contar y registrar el inventario final de todos los productos con movimiento.');
     return;
   }
-  // Validar que haya entregas registradas — solo bloquear si es admin sin entregas
+  // Validar entregas — solo bloquear admin sin entregas
   var ent=entregas.reduce(function(s,e){return s+(e.valor||0);},0);
   if(isAdmin && (!entregas.length || ent<=0)){
-    alert('❌ No se puede cerrar el turno.\n\nDebes registrar al menos una entrega de dinero en efectivo antes de cerrar.');
-    return;
-  }
-  if(!isAdmin && (!entregas.length || ent<=0)){
-    alert('⚠ El turno aún no tiene entregas de dinero registradas.\n\nSolicita al administrador que registre las entregas antes de cerrar.');
+    alert('❌ No se puede cerrar.\n\nDebes registrar al menos una entrega de dinero antes de cerrar.');
     return;
   }
   var tv=invRows.reduce(function(s,r){return s+r.total_venta;},0);
@@ -1906,12 +1938,15 @@ function confirmarCierre(){
   });
   if(erroresConf.length){alert('❌ Hay productos con inventario final mayor al disponible. Corrige antes de cerrar.');return;}
   var entConf=entregas.reduce(function(s,e){return s+(e.valor||0);},0);
-  if(!entregas.length||entConf<=0){alert('❌ Registra al menos una entrega de dinero con valor mayor a cero antes de cerrar.');return;}
+  if(isAdmin && (!entregas.length||entConf<=0)){alert('❌ Registra al menos una entrega de dinero antes de cerrar.');return;}
   document.getElementById('cierreModal').classList.remove('open');
   setSyncStatus('sync','⟳ Cerrando...');
+  // Marcar como cerrado ANTES del fetch para que autoSave no interfiera
+  window._turnoCerrado=true;
+  clearTimeout(saveTimer);
   var key=sesion.fecha+'_'+sesion.punto+'_'+sesion.turno;
   var snap=invRows.map(function(r){return {id:r.id,name:r.name,precio:r.precio,ant:r.ant,entradas:r.entradas||[],entrante:r.entrante,dev:r.dev,rappi:r.rappi,inv_final:r.inv_final,pedido:r.pedido,disponible:r.disponible,vendido:r.vendido,rappi_venta:r.rappi_venta||0,total_venta:r.total_venta};});
-  sbUpsert('turnos_caja',{
+  var payload={
     turno_key:key,punto:sesion.punto,turno:sesion.turno,fecha:sesion.fecha,cajero:sesion.cajero,cajero_aux:sesion.cajeroAux||'',
     snapshot:snap,
     gastos_list:gastos,entregas_list:entregas,
@@ -1925,12 +1960,17 @@ function confirmarCierre(){
     nota_siguiente:document.getElementById('inNotaSig')?document.getElementById('inNotaSig').value:'',
     entrega_final:entregaFinal,
     cerrado:true,updated_at:new Date().toISOString()
-  }).then(function(){
-    window._turnoCerrado=true;
+  };
+  sbUpsert('turnos_caja',payload).then(function(){
     setSyncStatus('ok','✓ Cerrado');
     alert('✅ Turno cerrado correctamente.');
     salir();
-  }).catch(function(e){setSyncStatus('err','✗ Error');alert('Error: '+e.message);});
+  }).catch(function(e){
+    // Si falló, revertir el estado local
+    window._turnoCerrado=false;
+    setSyncStatus('err','✗ Error');
+    alert('Error al cerrar: '+e.message);
+  });
 }
 
 // ── IMPRIMIR ─────────────────────────────────────
@@ -2075,10 +2115,21 @@ function guardarEditCajero(){
   // Actualizar header
   var tN=sesion.turno==='manana'?'☀ Mañana':sesion.turno==='tarde'?'🌙 Tarde':'⬛ Completo';
   document.getElementById('turnoBadge').textContent=tN+' — '+principal+(aux?' & '+aux:'');
-  // Guardar en Supabase
-  autoSave();
   document.getElementById('editCajeroModal').classList.remove('open');
-  setSyncStatus('ok','✓ Cajero actualizado');
+  setSyncStatus('sync','⟳ Guardando...');
+  // PATCH directo e inmediato — no depender de autoSave (que tiene delay y podría perderse)
+  var key=sesion.fecha+'_'+sesion.punto+'_'+sesion.turno;
+  fetch(SB_URL+'/rest/v1/turnos_caja?turno_key=eq.'+encodeURIComponent(key),{
+    method:'PATCH',
+    headers:Object.assign({},HEADS,{'Prefer':'return=minimal'}),
+    body:JSON.stringify({cajero:principal,cajero_aux:aux,updated_at:new Date().toISOString()})
+  }).then(function(r){
+    if(!r.ok) return r.text().then(function(t){throw new Error(t);});
+    setSyncStatus('ok','✓ Cajero actualizado');
+  }).catch(function(e){
+    setSyncStatus('err','✗ Error guardando cajero');
+    console.error(e);
+  });
 }
 
 
@@ -2362,6 +2413,15 @@ function abrirPapelera(){
         card.dataset.pape='1';
         res.appendChild(card);
       });
+      // Delegación de eventos — sin onclick inline
+      res.addEventListener('click',function(e){
+        var btnEdit=e.target.closest('.btn-editar-hist');
+        var btnExcel=e.target.closest('.btn-excel-hist');
+        var btnDel=e.target.closest('.btn-del-hist');
+        if(btnEdit){var t=turnosMap[btnEdit.dataset.key];if(t)abrirEditarTurno(t);}
+        if(btnExcel){exportarTurnoExcel(btnExcel.dataset.key);}
+        if(btnDel){var cardEl=btnDel.closest('div[data-card]');eliminarTurno(btnDel.dataset.key,cardEl);}
+      });
     }).catch(function(e){res.innerHTML='<p style="color:var(--rojo);font-size:.8rem;">Error: '+e.message+'</p>';});
 }
 
@@ -2624,6 +2684,7 @@ function buscarHistorial(){
         porFecha[t.fecha].push(t);
       });
 
+      var turnosMap={};
       Object.keys(porFecha).sort().reverse().forEach(function(fecha){
         // Encabezado fecha
         var fechaHdr=document.createElement('div');
@@ -2646,6 +2707,7 @@ function buscarHistorial(){
           var card=document.createElement('div');
           card.style.cssText='background:var(--gris1);border:1px solid var(--gris2);border-radius:8px;padding:10px 12px;margin-bottom:8px;';
           card.dataset.card='1';
+          turnosMap[t.turno_key]=t;
 
           card.innerHTML=
             '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">'
@@ -2659,12 +2721,10 @@ function buscarHistorial(){
             +'</div>'
             +'</div>'
             +'<div style="display:flex;gap:6px;">'
-            +'<button class="btn" style="flex:2;padding:5px;font-size:.72rem;background:#1a3a1a;color:#7dbb7d;" onclick="(function(){abrirEditarTurno('+JSON.stringify(t).replace(/"/g,"&quot;")+')})()">'
-            +'✏ Editar / Ver</button>'
-            +'<button class="btn" style="flex:1;padding:5px;font-size:.72rem;background:#1a3a1a;color:#5dff5d;" onclick="exportarTurnoExcel(\''+t.turno_key+'\')">'
-            +'📥 Excel</button>'
-            +'<button style="background:none;border:1px solid #ddd;border-radius:5px;cursor:pointer;font-size:.7rem;color:#aaa;padding:5px 8px;" '
-            +'onclick="eliminarTurno(\''+t.turno_key+'\',this.closest(\'div[data-card]\'))">'
+            +'<button class="btn btn-editar-hist" data-key="'+escH(t.turno_key)+'" style="flex:2;padding:5px;font-size:.72rem;background:#1a3a1a;color:#7dbb7d;">✏ Editar / Ver</button>'
+            +'<button class="btn btn-excel-hist" data-key="'+escH(t.turno_key)+'" style="flex:1;padding:5px;font-size:.72rem;background:#1a3a1a;color:#5dff5d;">📥 Excel</button>'
+            +'<button class="btn-del-hist" data-key="'+escH(t.turno_key)+'" style="background:none;border:1px solid #ddd;border-radius:5px;cursor:pointer;font-size:.7rem;color:#aaa;padding:5px 8px;">🗑</button>'
+            +'</div>';
             +'🗑</button>'
             +'</div>';
 
