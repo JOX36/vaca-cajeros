@@ -2725,12 +2725,21 @@ function buscarHistorial(){
             +'<button class="btn btn-excel-hist" data-key="'+escH(t.turno_key)+'" style="flex:1;padding:5px;font-size:.72rem;background:#1a3a1a;color:#5dff5d;">📥 Excel</button>'
             +'<button class="btn-del-hist" data-key="'+escH(t.turno_key)+'" style="background:none;border:1px solid #ddd;border-radius:5px;cursor:pointer;font-size:.7rem;color:#aaa;padding:5px 8px;">🗑</button>'
             +'</div>';
-            +'🗑</button>'
-            +'</div>';
 
           res.appendChild(card);
         });
       });
+
+      // Delegación de eventos para los botones del historial
+      res.addEventListener('click',function(e){
+        var btnEdit=e.target.closest('.btn-editar-hist');
+        var btnExcel=e.target.closest('.btn-excel-hist');
+        var btnDel=e.target.closest('.btn-del-hist');
+        if(btnEdit){var t=turnosMap[btnEdit.dataset.key];if(t)abrirEditarTurno(t);}
+        if(btnExcel){exportarTurnoExcel(btnExcel.dataset.key);}
+        if(btnDel){var cardEl=btnDel.closest('div[data-card]');eliminarTurno(btnDel.dataset.key,cardEl);}
+      });
+
     }).catch(function(e){res.innerHTML='<p style="color:var(--rojo);font-size:.8rem;">Error: '+e.message+'</p>';});
 }
 
